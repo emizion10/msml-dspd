@@ -252,6 +252,7 @@ class ScoreEstimator(PyTorchEstimator):
             lags_seq=self.lags_seq,
             scaling=self.scaling,
             conditioning_length=self.conditioning_length,
+            ## Only difference in parameters w.r.t training network
             num_parallel_samples=self.num_parallel_samples,
             time_feat_dim=self.time_feat_dim,
         ).to(device)

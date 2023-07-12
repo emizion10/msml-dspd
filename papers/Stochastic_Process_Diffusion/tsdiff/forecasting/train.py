@@ -51,7 +51,7 @@ def train(
 
     # Load data
     dataset = get_dataset(dataset, regenerate=False)
-
+    # Eg:- For exchange_rate, target_dim = 8
     target_dim = int(dataset.metadata.feat_static_cat[0].cardinality)
 
     train_grouper = MultivariateGrouper(max_target_dim=min(2000, target_dim))
@@ -65,8 +65,10 @@ def train(
     for i in range(len(dataset_train)):
         x = deepcopy(dataset_train[i])
         x['target'] = x['target'][:,-val_window:]
+        # Eg:- For exchange_rate, Dim - [8,600]
         dataset_val.append(x)
-        dataset_train[i]['target'] = dataset_train[i]['target'][:,:-val_window]
+        # Eg:- For exchange_rate, Dim - [8,5471]
+        dataset_train[i]['target'] = dataset_train[i]['target'][:, :-val_window]
 
     # Load model
     if network == 'timegrad':
