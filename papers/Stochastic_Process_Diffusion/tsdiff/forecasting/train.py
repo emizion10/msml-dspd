@@ -5,6 +5,8 @@ from copy import deepcopy
 
 from gluonts.dataset.multivariate_grouper import MultivariateGrouper
 from gluonts.dataset.repository.datasets import get_dataset
+from gluonts.dataset.common import ListDataset
+from gluonts.dataset.field_names import FieldName
 from gluonts.evaluation.backtest import make_evaluation_predictions
 from gluonts.evaluation import MultivariateEvaluator
 
@@ -19,10 +21,15 @@ from tsdiff.forecasting.models import (
 )
 from tsdiff.utils import NotSupportedModelNoiseCombination, TrainerForecasting
 
+from datetime import datetime
+from distutils.util import strtobool
+import pandas as pd
+
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 
 def energy_score(forecast, target):
     obs_dist = np.mean(np.linalg.norm((forecast - target), axis=-1))
@@ -30,6 +37,161 @@ def energy_score(forecast, target):
         np.linalg.norm(forecast[:, np.newaxis, ...] - forecast, axis=-1)
     )
     return obs_dist - pair_dist * 0.5
+
+
+def convert_tsf_to_dataframe(
+    full_file_path_and_name,
+    replace_missing_vals_with="NaN",
+    value_column_name="series_value",
+):
+    col_names = []
+    col_types = []
+    all_data = {}
+    line_count = 0
+    frequency = None
+    forecast_horizon = None
+    contain_missing_values = None
+    contain_equal_length = None
+    lag = None
+    found_data_tag = False
+    found_data_section = False
+    started_reading_data_section = False
+
+    with open(full_file_path_and_name, "r", encoding="cp1252") as file:
+        for line in file:
+            # Strip white space from start/end of line
+            line = line.strip()
+
+            if line:
+                if line.startswith("@"):  # Read meta-data
+                    if not line.startswith("@data"):
+                        line_content = line.split(" ")
+                        if line.startswith("@attribute"):
+                            if (
+                                len(line_content) != 3
+                            ):  # Attributes have both name and type
+                                raise Exception(
+                                    "Invalid meta-data specification.")
+
+                            col_names.append(line_content[1])
+                            col_types.append(line_content[2])
+                        else:
+                            if (
+                                len(line_content) != 2
+                            ):  # Other meta-data have only values
+                                raise Exception(
+                                    "Invalid meta-data specification.")
+
+                            if line.startswith("@frequency"):
+                                frequency = line_content[1]
+                            elif line.startswith("@horizon"):
+                                forecast_horizon = int(line_content[1])
+                            elif line.startswith("@missing"):
+                                contain_missing_values = bool(
+                                    strtobool(line_content[1])
+                                )
+                            elif line.startswith("@equallength"):
+                                contain_equal_length = bool(
+                                    strtobool(line_content[1]))
+                            elif line.startswith("@lag"):
+                                lag = int(line_content[1])
+
+                    else:
+                        if len(col_names) == 0:
+                            raise Exception(
+                                "Missing attribute section. Attribute section must come before data."
+                            )
+
+                        found_data_tag = True
+                elif not line.startswith("#"):
+                    if len(col_names) == 0:
+                        raise Exception(
+                            "Missing attribute section. Attribute section must come before data."
+                        )
+                    elif not found_data_tag:
+                        raise Exception("Missing @data tag.")
+                    else:
+                        if not started_reading_data_section:
+                            started_reading_data_section = True
+                            found_data_section = True
+                            all_series = []
+
+                            for col in col_names:
+                                all_data[col] = []
+
+                        full_info = line.split(":")
+
+                        if len(full_info) != (len(col_names) + 1):
+                            raise Exception(
+                                "Missing attributes/values in series.")
+
+                        series = full_info[len(full_info) - 1]
+                        series = series.split(",")
+
+                        if len(series) == 0:
+                            raise Exception(
+                                "A given series should contains a set of comma separated numeric values. At least one numeric value should be there in a series. Missing values should be indicated with ? symbol"
+                            )
+
+                        numeric_series = []
+
+                        for val in series:
+                            if val == "?":
+                                numeric_series.append(
+                                    replace_missing_vals_with)
+                            else:
+                                numeric_series.append(float(val))
+
+                        if numeric_series.count(replace_missing_vals_with) == len(
+                            numeric_series
+                        ):
+                            raise Exception(
+                                "All series values are missing. A given series should contains a set of comma separated numeric values. At least one numeric value should be there in a series."
+                            )
+
+                        all_series.append(pd.Series(numeric_series).array)
+
+                        for i in range(len(col_names)):
+                            att_val = None
+                            if col_types[i] == "numeric":
+                                att_val = int(full_info[i])
+                            elif col_types[i] == "string":
+                                att_val = str(full_info[i])
+                            elif col_types[i] == "date":
+                                att_val = datetime.strptime(
+                                    full_info[i], "%Y-%m-%d %H-%M-%S"
+                                )
+                            else:
+                                raise Exception(
+                                    "Invalid attribute type."
+                                )  # Currently, the code supports only numeric, string and date types. Extend this as required.
+
+                            if att_val is None:
+                                raise Exception("Invalid attribute value.")
+                            else:
+                                all_data[col_names[i]].append(att_val)
+
+                line_count = line_count + 1
+
+        if line_count == 0:
+            raise Exception("Empty file.")
+        if len(col_names) == 0:
+            raise Exception("Missing attribute section.")
+        if not found_data_section:
+            raise Exception("Missing series information under data section.")
+
+        all_data[value_column_name] = all_series
+        loaded_data = pd.DataFrame(all_data)
+
+        return (
+            loaded_data,
+            frequency,
+            forecast_horizon,
+            contain_missing_values,
+            contain_equal_length,
+            lag,
+        )
+
 
 def train(
     seed: int,
@@ -47,27 +209,56 @@ def train(
     np.random.seed(seed)
     torch.manual_seed(seed)
 
+    # TODO: Find the reason for this logic
     covariance_dim = 4 if dataset != 'exchange_rate_nips' else -4
 
     # Load data
-    dataset = get_dataset(dataset, regenerate=False)
+    # dataset = get_dataset(dataset, regenerate=False)
+    uni_dataset = convert_tsf_to_dataframe(
+        './tsdiff/data/gold_price_dataset.tsf')
 
-    target_dim = int(dataset.metadata.feat_static_cat[0].cardinality)
+    univariate_data = uni_dataset[0]['series_value'].values[0]
+    forecast_horizon = uni_dataset[2]
+    data_entry_train = {
+        FieldName.START: '2010-09-01',  # Replace with appropriate start timestamp
+        FieldName.TARGET: univariate_data[:-100],
+    }
+
+    dataset_train = ListDataset([data_entry_train], freq="D")
+
+    data_entry_test = {
+        FieldName.START: '2017-10-28',  # Replace with appropriate start timestamp
+        FieldName.TARGET: univariate_data[-100:],
+    }
+
+    dataset_test = ListDataset([data_entry_test], freq="D")
+
+    # Eg:- For exchange_rate, the target_dim = 8
+    target_dim = int(1)
 
     train_grouper = MultivariateGrouper(max_target_dim=min(2000, target_dim))
-    test_grouper = MultivariateGrouper(num_test_dates=int(len(dataset.test) / len(dataset.train)), max_target_dim=min(2000, target_dim))
-    dataset_train = train_grouper(dataset.train)
-    dataset_test = test_grouper(dataset.test)
+    test_grouper = MultivariateGrouper(num_test_dates=int(
+        len(dataset_test) / len(dataset_train)), max_target_dim=min(2000, target_dim))
+    dataset_train = train_grouper(dataset_train)
+    dataset_test = test_grouper(dataset_test)
 
-    val_window = 20 * dataset.metadata.prediction_length
+    # Slicing original dataset.train to training & validation arrays
+    # val_window = 20 * dataset.metadata.prediction_length
+    val_window = 20 * forecast_horizon
     dataset_train = list(dataset_train)
     dataset_val = []
     for i in range(len(dataset_train)):
         x = deepcopy(dataset_train[i])
-        x['target'] = x['target'][:,-val_window:]
+        x['target'] = x['target'][:, -val_window:]
+        # Eg:- For exchange_rate, Dim - [8,600]
         dataset_val.append(x)
-        dataset_train[i]['target'] = dataset_train[i]['target'][:,:-val_window]
+        # Eg:- For exchange_rate, Dim - [8,5471]
+        dataset_train[i]['target'] = dataset_train[i]['target'][:, :-val_window]
 
+    print(dataset_train[0]['target'])
+    print(len(dataset_train[0]['target']))
+    print(dataset_train[0]['target'][0])
+    print(len(dataset_train[0]['target'][0]))
     # Load model
     if network == 'timegrad':
         if noise != 'normal':
@@ -91,14 +282,16 @@ def train(
         prediction_net=prediction_net,
         noise=noise,
         target_dim=target_dim,
-        prediction_length=dataset.metadata.prediction_length,
-        context_length=dataset.metadata.prediction_length,
+        #  Eg:- For exchange_rate, prediction_length = 30
+        prediction_length=forecast_horizon,
+        context_length=forecast_horizon,
         cell_type='GRU',
         num_cells=num_cells,
         hidden_dim=hidden_dim,
         residual_layers=residual_layers,
         input_size=target_dim * 4 + covariance_dim,
-        freq=dataset.metadata.freq,
+        #  Eg:- For exchange_rate, freq = B, i.e business days
+        freq='D',
         loss_type='l2',
         scaling=True,
         diff_steps=diffusion_steps,
@@ -115,7 +308,7 @@ def train(
             patience=10,
         ),
     )
-
+    print('Model', estimator)
     # Training
     predictor = estimator.train(dataset_train, dataset_val, num_workers=8)
 
@@ -141,9 +334,10 @@ def train(
         NRMSE_sum=agg_metric['m_sum_NRMSE'],
         energy_score=score,
     )
-    metrics = { k: float(v) for k,v in metrics.items() }
+    metrics = {k: float(v) for k, v in metrics.items()}
 
     return metrics
+    # return True
 
 
 if __name__ == '__main__':

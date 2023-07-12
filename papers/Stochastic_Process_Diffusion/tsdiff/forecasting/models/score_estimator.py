@@ -256,6 +256,7 @@ class ScoreEstimator(PyTorchEstimator):
             time_feat_dim=self.time_feat_dim,
         ).to(device)
 
+        # Clarify: parameters are copied from training network to predicction network
         copy_parameters(trained_network, prediction_network)
         input_names = get_module_forward_input_names(prediction_network)
         prediction_splitter = self.create_instance_splitter("test")
