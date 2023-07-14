@@ -214,33 +214,40 @@ def train(
 
     # Load data
     # dataset = get_dataset(dataset, regenerate=False)
+
     uni_dataset = convert_tsf_to_dataframe(
-        './tsdiff/data/gold_price_dataset.tsf')
+        './papers/Stochastic_Process_Diffusion/tsdiff/data/saugeenday_dataset.tsf')
 
     univariate_data = uni_dataset[0]['series_value'].values[0]
-    forecast_horizon = uni_dataset[2]
+    forecast_horizon = 24
+    # forecast_horizon = dataset.metadata.prediction_length
     data_entry_train = {
-        FieldName.START: '2010-09-01',  # Replace with appropriate start timestamp
+        # FieldName.START: '1915-01-01',  # Replace with appropriate start timestamp
+        FieldName.START: uni_dataset[0]['start_timestamp'][0],  # Replace with appropriate start timestamp
         FieldName.TARGET: univariate_data[:-100],
     }
 
-    dataset_train = ListDataset([data_entry_train], freq="D")
+    dataset_train = ListDataset([data_entry_train], freq="H")
 
     data_entry_test = {
-        FieldName.START: '2017-10-28',  # Replace with appropriate start timestamp
+        FieldName.START: '1977-02-01',  # Replace with appropriate start timestamp
         FieldName.TARGET: univariate_data[-100:],
     }
 
-    dataset_test = ListDataset([data_entry_test], freq="D")
+    dataset_test = ListDataset([data_entry_test], freq="H")
 
     # Eg:- For exchange_rate, the target_dim = 8
     target_dim = int(1)
+    # target_dim = int(dataset.metadata.feat_static_cat[0].cardinality)
 
     train_grouper = MultivariateGrouper(max_target_dim=min(2000, target_dim))
-    test_grouper = MultivariateGrouper(num_test_dates=int(
-        len(dataset_test) / len(dataset_train)), max_target_dim=min(2000, target_dim))
+    test_grouper = MultivariateGrouper(num_test_dates=int(len(dataset_test) / len(dataset_train)), max_target_dim=min(2000, target_dim))
     dataset_train = train_grouper(dataset_train)
     dataset_test = test_grouper(dataset_test)
+    # train_grouper = MultivariateGrouper(max_target_dim=min(2000, target_dim))
+    # test_grouper = MultivariateGrouper(num_test_dates=int(len(dataset.test) / len(dataset.train)), max_target_dim=min(2000, target_dim))
+    # dataset_train = train_grouper(dataset.train)
+    # dataset_test = test_grouper(dataset.test)
 
     # Slicing original dataset.train to training & validation arrays
     # val_window = 20 * dataset.metadata.prediction_length
@@ -255,10 +262,6 @@ def train(
         # Eg:- For exchange_rate, Dim - [8,5471]
         dataset_train[i]['target'] = dataset_train[i]['target'][:, :-val_window]
 
-    print(dataset_train[0]['target'])
-    print(len(dataset_train[0]['target']))
-    print(dataset_train[0]['target'][0])
-    print(len(dataset_train[0]['target'][0]))
     # Load model
     if network == 'timegrad':
         if noise != 'normal':
@@ -289,9 +292,11 @@ def train(
         num_cells=num_cells,
         hidden_dim=hidden_dim,
         residual_layers=residual_layers,
-        input_size=target_dim * 4 + covariance_dim,
-        #  Eg:- For exchange_rate, freq = B, i.e business days
-        freq='D',
+        # input_size=target_dim * 4 + covariance_dim,
+        # # Eg:- For exchange_rate, freq = B, i.e business days
+        # freq=dataset.metadata.freq,
+        input_size=target_dim * 4 + 4,
+        freq='H',
         loss_type='l2',
         scaling=True,
         diff_steps=diffusion_steps,
@@ -308,7 +313,6 @@ def train(
             patience=10,
         ),
     )
-    print('Model', estimator)
     # Training
     predictor = estimator.train(dataset_train, dataset_val, num_workers=8)
 

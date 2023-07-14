@@ -133,6 +133,7 @@ class GaussianProcess(nn.Module):
             t = t.unsqueeze(-1)
         distance = t - t.transpose(-1, -2)
         diag = torch.eye(t.shape[-2]).to(t) * diag_epsilon
+         ## Use of RBF kernel as explained in Gaussian process prior
         return torch.exp(-torch.square(distance / self.sigma)) + diag
 
     def covariance_cholesky(self, t: TensorType[..., 'N', 1]) -> TensorType[..., 'N', 'N']:
