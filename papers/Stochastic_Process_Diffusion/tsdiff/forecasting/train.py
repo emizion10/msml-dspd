@@ -46,12 +46,12 @@ def train(
 ):
     np.random.seed(seed)
     torch.manual_seed(seed)
-
+    ## exchange_rate_nips have daily freq, rest everything has hourly
     covariance_dim = 4 if dataset != 'exchange_rate_nips' else -4
 
     # Load data
     dataset = get_dataset(dataset, regenerate=False)
-    # Eg:- For exchange_rate, target_dim = 8
+    ## Eg:- For exchange_rate, target_dim = 8
     target_dim = int(dataset.metadata.feat_static_cat[0].cardinality)
 
     train_grouper = MultivariateGrouper(max_target_dim=min(2000, target_dim))
