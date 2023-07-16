@@ -220,24 +220,22 @@ def train(
 
     univariate_data = uni_dataset[0]['series_value'].values[0]
     forecast_horizon = 24
-    # forecast_horizon = dataset.metadata.prediction_length
     data_entry_train = {
         # FieldName.START: '1915-01-01',  # Replace with appropriate start timestamp
         FieldName.START: uni_dataset[0]['start_timestamp'][0],  # Replace with appropriate start timestamp
         FieldName.TARGET: univariate_data[:-100],
     }
 
-    dataset_train = ListDataset([data_entry_train], freq="H")
-
+    dataset_train = ListDataset([data_entry_train,data_entry_train], freq="H")
     data_entry_test = {
         FieldName.START: '1977-02-01',  # Replace with appropriate start timestamp
-        FieldName.TARGET: univariate_data[-100:],
+        FieldName.TARGET:univariate_data[-100:],
     }
 
-    dataset_test = ListDataset([data_entry_test], freq="H")
+    dataset_test = ListDataset([data_entry_test,data_entry_test], freq="H")
 
     # Eg:- For exchange_rate, the target_dim = 8
-    target_dim = int(1)
+    target_dim = 2
     # target_dim = int(dataset.metadata.feat_static_cat[0].cardinality)
 
     train_grouper = MultivariateGrouper(max_target_dim=min(2000, target_dim))
@@ -323,7 +321,7 @@ def train(
 
     score = energy_score(
         forecast=np.array([x.samples for x in forecasts]),
-        target=np.array([x[-dataset.metadata.prediction_length:] for x in targets])[:,None,...],
+        target=np.array([x[-forecast_horizon:] for x in targets])[:,None,...],
     )
 
     evaluator = MultivariateEvaluator(quantiles=(np.arange(20)/20.0)[1:], target_agg_funcs={'sum': np.sum})
