@@ -117,7 +117,7 @@ class EpsilonTheta(nn.Module):
         nn.init.kaiming_normal_(self.input_projection.weight)
         nn.init.kaiming_normal_(self.skip_projection.weight)
         nn.init.zeros_(self.output_projection.weight)
-
+    ## TODO: cond refers to the latent
     def forward(self, inputs, time, cond):
         x = self.input_projection(inputs)
         x = F.leaky_relu(x, 0.4)

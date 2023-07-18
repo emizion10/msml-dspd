@@ -109,6 +109,7 @@ class TimeGradTrainingNetwork_All(TimeGradTrainingNetwork):
             past_observed_values=past_observed_values,
             past_is_pad=past_is_pad,
             future_time_feat=future_time_feat,
+            ## For ER, Dim- (64,30,8)->(batch_size,prediction_length,feature_dimension) 
             future_target_cdf=None,
             target_dimension_indicator=target_dimension_indicator,
         )
@@ -117,10 +118,12 @@ class TimeGradTrainingNetwork_All(TimeGradTrainingNetwork):
         std = past_target_cdf[...,-self.prediction_length:,:].std(1, keepdim=True).clamp(1e-4)
 
         # target = future_target_cdf[...,-self.prediction_length:,:] / scale
+        ## Normalization with mean & std of past_target_cdf
         target = (future_target_cdf[...,-self.prediction_length:,:] - mean) / std
         # target = (future_target_cdf[...,-self.prediction_length:,:] - past_target_cdf[...,-1:,:] - mean) / std
         # target = (future_target_cdf[...,-self.prediction_length:,:] - past_target_cdf[...,-1:,:]) / scale
-
+        
+        ## Dim for ER [64,30,1]
         t = torch.arange(self.prediction_length).view(1, -1, 1).repeat(target.shape[0], 1, 1).to(target)
         loss = self.diffusion.get_loss(self.denoise_fn, target, t=t, latent=latent, future_time_feat=future_time_feat)
 
