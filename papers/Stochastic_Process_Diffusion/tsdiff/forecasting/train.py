@@ -2,6 +2,7 @@ import argparse
 import numpy as np
 import torch
 from copy import deepcopy
+import matplotlib.pyplot as plt
 
 from gluonts.dataset.multivariate_grouper import MultivariateGrouper
 from gluonts.dataset.repository.datasets import get_dataset
@@ -70,6 +71,19 @@ def train(
         # Eg:- For exchange_rate, Dim - [8,5471]
         dataset_train[i]['target'] = dataset_train[i]['target'][:, :-val_window]
 
+    start_timestamp =  dataset_train[0]['start']
+    end_timestamp = start_timestamp + np.timedelta64(dataset_train[0]['target'].shape[1], 'D')
+    timestamps = np.arange(start_timestamp, end_timestamp, dtype='datetime64[D]')
+    plt.figure(1)
+    for feature_idx in range(target_dim):
+        plt.plot(timestamps, dataset_train[0]['target'][feature_idx, :], label=f'Feature {feature_idx + 1}')
+    plt.xlabel('Time')
+    plt.ylabel('Value')
+    plt.title('Multivariate Time Series')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
     # Load model
     if network == 'timegrad':
         if noise != 'normal':
@@ -125,11 +139,38 @@ def train(
     forecast_it, ts_it = make_evaluation_predictions(dataset=dataset_test, predictor=predictor, num_samples=100)
     forecasts = list(forecast_it)
     targets = list(ts_it)
-
+    # forecasts[0].samples[0] has first prediction sample
     score = energy_score(
+        #(5, 100, 30, 8)
         forecast=np.array([x.samples for x in forecasts]),
+        #(5, 1, 30, 8)
         target=np.array([x[-dataset.metadata.prediction_length:] for x in targets])[:,None,...],
     )
+
+    test_start_timestamp =  dataset_test.list_data[0]['start']
+    test_end_timestamp = test_start_timestamp + np.timedelta64(30, 'D')
+    test_timestamps = np.arange(test_start_timestamp, test_end_timestamp, dtype='datetime64[D]')
+    predicted_sample = np.array([x.samples for x in forecasts])[0][0]
+    plt.figure(2)
+    for feature_idx in range(target_dim):
+        plt.plot(test_timestamps, predicted_sample[:, feature_idx], label=f'Feature {feature_idx + 1}')
+    plt.xlabel('Time')
+    plt.ylabel('Value')
+    plt.title('Multivariate Time Series Forecast')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    actual_sample = np.array([x[-dataset.metadata.prediction_length:] for x in targets])[:,None,...][0][0]
+    plt.figure(3)
+    for feature_idx in range(target_dim):
+        plt.plot(test_timestamps, actual_sample[:, feature_idx], label=f'Feature {feature_idx + 1}')
+    plt.xlabel('Time')
+    plt.ylabel('Value')
+    plt.title('Multivariate Time Series Truth Value')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
 
     evaluator = MultivariateEvaluator(quantiles=(np.arange(20)/20.0)[1:], target_agg_funcs={'sum': np.sum})
     agg_metric, _ = evaluator(targets, forecasts, num_series=len(dataset_test))
