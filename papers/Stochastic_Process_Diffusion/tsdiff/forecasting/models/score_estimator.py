@@ -67,7 +67,7 @@ class ScoreEstimator(PyTorchEstimator):
         lags_seq: Optional[List[int]] = None,
         time_features: Optional[List[TimeFeature]] = None,
         old: bool = False,
-        time_feat_dim: int = 4,
+        time_feat_dim: int = 2, #change acc to frequency
         **kwargs,
     ) -> None:
         super().__init__(trainer=trainer, **kwargs)

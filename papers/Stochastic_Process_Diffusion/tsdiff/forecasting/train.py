@@ -2,7 +2,7 @@ import argparse
 import numpy as np
 import torch
 from copy import deepcopy
-
+import matplotlib.pyplot as plt
 from gluonts.dataset.multivariate_grouper import MultivariateGrouper
 from gluonts.dataset.repository.datasets import get_dataset
 from gluonts.dataset.common import ListDataset
@@ -219,35 +219,31 @@ def train(
         './papers/Stochastic_Process_Diffusion/tsdiff/data/saugeenday_dataset.tsf')
 
     univariate_data = uni_dataset[0]['series_value'].values[0]
-    forecast_horizon = 24
+    forecast_horizon =  uni_dataset[2] #24
+    start_timestamp =  uni_dataset[0]['start_timestamp'][0]
     data_entry_train = {
         # FieldName.START: '1915-01-01',  # Replace with appropriate start timestamp
-        FieldName.START: uni_dataset[0]['start_timestamp'][0],  # Replace with appropriate start timestamp
+        FieldName.START: start_timestamp,  # Replace with appropriate start timestamp
         FieldName.TARGET: univariate_data[:-100],
     }
 
-    dataset_train = ListDataset([data_entry_train,data_entry_train], freq="H")
+    dataset_train = ListDataset([data_entry_train,data_entry_train], freq="D")
+    test_start_timestamp = start_timestamp + np.timedelta64(len(univariate_data)-100, 'D')
     data_entry_test = {
-        FieldName.START: '1977-02-01',  # Replace with appropriate start timestamp
+        FieldName.START: test_start_timestamp,  # Replace with appropriate start timestamp
         FieldName.TARGET:univariate_data[-100:],
     }
 
-    dataset_test = ListDataset([data_entry_test,data_entry_test], freq="H")
+    dataset_test = ListDataset([data_entry_test,data_entry_test], freq="D")
 
-    # Eg:- For exchange_rate, the target_dim = 8
     target_dim = 2
-    # target_dim = int(dataset.metadata.feat_static_cat[0].cardinality)
 
     train_grouper = MultivariateGrouper(max_target_dim=min(2000, target_dim))
     test_grouper = MultivariateGrouper(num_test_dates=int(len(dataset_test) / len(dataset_train)), max_target_dim=min(2000, target_dim))
     dataset_train = train_grouper(dataset_train)
     dataset_test = test_grouper(dataset_test)
-    # train_grouper = MultivariateGrouper(max_target_dim=min(2000, target_dim))
-    # test_grouper = MultivariateGrouper(num_test_dates=int(len(dataset.test) / len(dataset.train)), max_target_dim=min(2000, target_dim))
-    # dataset_train = train_grouper(dataset.train)
-    # dataset_test = test_grouper(dataset.test)
 
-    # Slicing original dataset.train to training & validation arrays
+    # Slicing original dataset to training & validation arrays
     # val_window = 20 * dataset.metadata.prediction_length
     val_window = 20 * forecast_horizon
     dataset_train = list(dataset_train)
@@ -259,6 +255,19 @@ def train(
         dataset_val.append(x)
         # Eg:- For exchange_rate, Dim - [8,5471]
         dataset_train[i]['target'] = dataset_train[i]['target'][:, :-val_window]
+
+    end_timestamp = start_timestamp + np.timedelta64(dataset_train[0]['target'].shape[1], 'D')
+    timestamps = np.arange(start_timestamp, end_timestamp, dtype='datetime64[D]')
+    plt.figure(1)
+    for feature_idx in range(target_dim):
+        plt.plot(timestamps, dataset_train[0]['target'][feature_idx, :], label=f'Feature {feature_idx + 1}')
+    plt.xlabel('Time')
+    plt.ylabel('Value')
+    plt.title('Multivariate Time Series')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig('train_data.png')
+    plt.show()
 
     # Load model
     if network == 'timegrad':
@@ -291,10 +300,8 @@ def train(
         hidden_dim=hidden_dim,
         residual_layers=residual_layers,
         # input_size=target_dim * 4 + covariance_dim,
-        # # Eg:- For exchange_rate, freq = B, i.e business days
-        # freq=dataset.metadata.freq,
-        input_size=target_dim * 4 + 4,
-        freq='H',
+        input_size=target_dim * 4 + 2,
+        freq='D',
         loss_type='l2',
         scaling=True,
         diff_steps=diffusion_steps,
@@ -323,6 +330,32 @@ def train(
         forecast=np.array([x.samples for x in forecasts]),
         target=np.array([x[-forecast_horizon:] for x in targets])[:,None,...],
     )
+
+    test_end_timestamp = test_start_timestamp + np.timedelta64(forecast_horizon, 'D')
+    test_timestamps = np.arange(test_start_timestamp, test_end_timestamp, dtype='datetime64[D]')
+    predicted_sample = np.array([x.samples for x in forecasts])[0][0]
+    plt.figure(2)
+    for feature_idx in range(target_dim):
+        plt.plot(test_timestamps, predicted_sample[:, feature_idx], label=f'Feature {feature_idx + 1}')
+    plt.xlabel('Time')
+    plt.ylabel('Value')
+    plt.title('Multivariate Time Series Forecast')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig('forecast.png')
+    plt.show()
+
+    actual_sample = np.array([x[-forecast_horizon:] for x in targets])[:,None,...][0][0]
+    plt.figure(3)
+    for feature_idx in range(target_dim):
+        plt.plot(test_timestamps, actual_sample[:, feature_idx], label=f'Feature {feature_idx + 1}')
+    plt.xlabel('Time')
+    plt.ylabel('Value')
+    plt.title('Multivariate Time Series Truth Value')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig('test_truth_data.png')
+    plt.show()
 
     evaluator = MultivariateEvaluator(quantiles=(np.arange(20)/20.0)[1:], target_agg_funcs={'sum': np.sum})
     agg_metric, _ = evaluator(targets, forecasts, num_series=len(dataset_test))
