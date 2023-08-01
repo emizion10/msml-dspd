@@ -82,6 +82,7 @@ def train(
     plt.title('Multivariate Time Series')
     plt.legend()
     plt.grid(True)
+    plt.savefig('train_data.png')
     plt.show()
 
     # Load model
@@ -159,6 +160,7 @@ def train(
     plt.title('Multivariate Time Series Forecast')
     plt.legend()
     plt.grid(True)
+    plt.savefig('forecast.png')
     plt.show()
 
     actual_sample = np.array([x[-dataset.metadata.prediction_length:] for x in targets])[:,None,...][0][0]
@@ -170,6 +172,7 @@ def train(
     plt.title('Multivariate Time Series Truth Value')
     plt.legend()
     plt.grid(True)
+    plt.savefig('test_truth_data.png')
     plt.show()
 
     evaluator = MultivariateEvaluator(quantiles=(np.arange(20)/20.0)[1:], target_agg_funcs={'sum': np.sum})
