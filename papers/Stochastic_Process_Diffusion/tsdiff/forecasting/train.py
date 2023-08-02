@@ -8,7 +8,7 @@ from gluonts.dataset.repository.datasets import get_dataset
 from gluonts.dataset.common import ListDataset
 from gluonts.dataset.field_names import FieldName
 from gluonts.evaluation.backtest import make_evaluation_predictions
-from gluonts.evaluation import MultivariateEvaluator
+from gluonts.evaluation import MultivariateEvaluator,Evaluator
 
 from tsdiff.forecasting.models import (
     ScoreEstimator,
@@ -227,16 +227,16 @@ def train(
         FieldName.TARGET: univariate_data[:-100],
     }
 
-    dataset_train = ListDataset([data_entry_train,data_entry_train], freq="D")
+    dataset_train = ListDataset([data_entry_train], freq="D")
     test_start_timestamp = start_timestamp + np.timedelta64(len(univariate_data)-100, 'D')
     data_entry_test = {
         FieldName.START: test_start_timestamp,  # Replace with appropriate start timestamp
         FieldName.TARGET:univariate_data[-100:],
     }
 
-    dataset_test = ListDataset([data_entry_test,data_entry_test], freq="D")
+    dataset_test = ListDataset([data_entry_test], freq="D")
 
-    target_dim = 2
+    target_dim = 1
 
     train_grouper = MultivariateGrouper(max_target_dim=min(2000, target_dim))
     test_grouper = MultivariateGrouper(num_test_dates=int(len(dataset_test) / len(dataset_train)), max_target_dim=min(2000, target_dim))
@@ -357,16 +357,16 @@ def train(
     plt.savefig('test_truth_data.png')
     plt.show()
 
-    evaluator = MultivariateEvaluator(quantiles=(np.arange(20)/20.0)[1:], target_agg_funcs={'sum': np.sum})
+    evaluator = Evaluator(quantiles=(np.arange(20)/20.0)[1:])
     agg_metric, _ = evaluator(targets, forecasts, num_series=len(dataset_test))
 
     metrics = dict(
         CRPS=agg_metric['mean_wQuantileLoss'],
         ND=agg_metric['ND'],
         NRMSE=agg_metric['NRMSE'],
-        CRPS_sum=agg_metric['m_sum_mean_wQuantileLoss'],
-        ND_sum=agg_metric['m_sum_ND'],
-        NRMSE_sum=agg_metric['m_sum_NRMSE'],
+        # CRPS_sum=agg_metric['m_sum_mean_wQuantileLoss'],
+        # ND_sum=agg_metric['m_sum_ND'],
+        # NRMSE_sum=agg_metric['m_sum_NRMSE'],
         energy_score=score,
     )
     metrics = {k: float(v) for k, v in metrics.items()}
