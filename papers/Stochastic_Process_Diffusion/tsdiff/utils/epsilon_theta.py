@@ -69,8 +69,9 @@ class ResidualBlock(nn.Module):
 class CondUpsampler(nn.Module):
     def __init__(self, cond_length, target_dim):
         super().__init__()
-        self.linear1 = nn.Linear(cond_length, target_dim // 2)
-        self.linear2 = nn.Linear(target_dim // 2, target_dim)
+        ## Replacing target_dim // 2 with 1 for univariate datasets
+        self.linear1 = nn.Linear(cond_length, target_dim // 2 or 1)
+        self.linear2 = nn.Linear(target_dim // 2 or 1, target_dim)
 
     def forward(self, x):
         x = self.linear1(x)
