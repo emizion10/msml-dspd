@@ -8,7 +8,7 @@ from gluonts.dataset.repository.datasets import get_dataset
 from gluonts.dataset.common import ListDataset
 from gluonts.dataset.field_names import FieldName
 from gluonts.evaluation.backtest import make_evaluation_predictions
-from gluonts.evaluation import MultivariateEvaluator
+from gluonts.evaluation import MultivariateEvaluator,Evaluator
 
 from tsdiff.forecasting.models import (
     ScoreEstimator,
@@ -221,22 +221,24 @@ def train(
     univariate_data = uni_dataset[0]['series_value'].values[0]
     forecast_horizon =  uni_dataset[2] #24
     start_timestamp =  uni_dataset[0]['start_timestamp'][0]
+    train_index = len(univariate_data) - (forecast_horizon*5)
     data_entry_train = {
-        # FieldName.START: '1915-01-01',  # Replace with appropriate start timestamp
         FieldName.START: start_timestamp,  # Replace with appropriate start timestamp
-        FieldName.TARGET: univariate_data[:-100],
+        FieldName.TARGET: univariate_data[:train_index],
     }
+    dataset_train = ListDataset([data_entry_train], freq="D")
 
-    dataset_train = ListDataset([data_entry_train,data_entry_train], freq="D")
-    test_start_timestamp = start_timestamp + np.timedelta64(len(univariate_data)-100, 'D')
-    data_entry_test = {
-        FieldName.START: test_start_timestamp,  # Replace with appropriate start timestamp
-        FieldName.TARGET:univariate_data[-100:],
-    }
+    test_start_timestamp = start_timestamp + np.timedelta64(train_index, 'D')
+    data_entry_test = []
+    for i in range(1,6):
+        data_entry_test.append({
+        FieldName.START: start_timestamp,  # Replace with appropriate start timestamp
+        FieldName.TARGET:univariate_data[:(train_index+i*forecast_horizon)],
+    })
 
-    dataset_test = ListDataset([data_entry_test,data_entry_test], freq="D")
+    dataset_test = ListDataset(data_entry_test, freq="D")
 
-    target_dim = 2
+    target_dim = 1
 
     train_grouper = MultivariateGrouper(max_target_dim=min(2000, target_dim))
     test_grouper = MultivariateGrouper(num_test_dates=int(len(dataset_test) / len(dataset_train)), max_target_dim=min(2000, target_dim))
@@ -333,14 +335,17 @@ def train(
 
     test_end_timestamp = test_start_timestamp + np.timedelta64(forecast_horizon, 'D')
     test_timestamps = np.arange(test_start_timestamp, test_end_timestamp, dtype='datetime64[D]')
-    predicted_sample = np.array([x.samples for x in forecasts])[0][0]
+    # predicted_sample = np.array([x.samples for x in forecasts])[0][0]
+    # TODO: same feature legend across samples
+    predicted_samples = np.array([x.samples for x in forecasts])[0]
     plt.figure(2)
-    for feature_idx in range(target_dim):
-        plt.plot(test_timestamps, predicted_sample[:, feature_idx], label=f'Feature {feature_idx + 1}')
+    for i in range(len(predicted_samples)):
+        for feature_idx in range(target_dim):
+            plt.plot(test_timestamps, predicted_samples[i, :, feature_idx], label=f'Feature {feature_idx + 1}', alpha=1 / (i + 1))
     plt.xlabel('Time')
     plt.ylabel('Value')
     plt.title('Multivariate Time Series Forecast')
-    plt.legend()
+    # plt.legend()
     plt.grid(True)
     plt.savefig('forecast.png')
     plt.show()
@@ -357,16 +362,16 @@ def train(
     plt.savefig('test_truth_data.png')
     plt.show()
 
-    evaluator = MultivariateEvaluator(quantiles=(np.arange(20)/20.0)[1:], target_agg_funcs={'sum': np.sum})
+    evaluator = Evaluator(quantiles=(np.arange(20)/20.0)[1:])
     agg_metric, _ = evaluator(targets, forecasts, num_series=len(dataset_test))
 
     metrics = dict(
         CRPS=agg_metric['mean_wQuantileLoss'],
         ND=agg_metric['ND'],
         NRMSE=agg_metric['NRMSE'],
-        CRPS_sum=agg_metric['m_sum_mean_wQuantileLoss'],
-        ND_sum=agg_metric['m_sum_ND'],
-        NRMSE_sum=agg_metric['m_sum_NRMSE'],
+        # CRPS_sum=agg_metric['m_sum_mean_wQuantileLoss'],
+        # ND_sum=agg_metric['m_sum_ND'],
+        # NRMSE_sum=agg_metric['m_sum_NRMSE'],
         energy_score=score,
     )
     metrics = {k: float(v) for k, v in metrics.items()}

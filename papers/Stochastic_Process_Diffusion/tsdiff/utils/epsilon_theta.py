@@ -36,15 +36,15 @@ class ResidualBlock(nn.Module):
         self.dilated_conv = nn.Conv1d(
             residual_channels,
             2 * residual_channels,
-            3,
-            padding=dilation,
+            3, 
+            padding=1,
             dilation=dilation,
             padding_mode="circular",
         )
         self.diffusion_projection = nn.Linear(hidden_size, residual_channels)
         self.conditioner_projection = nn.Conv1d(
-            1, 2 * residual_channels, 1, padding=2, padding_mode="circular"
-        )
+            1, 2 * residual_channels, 1, padding=1, padding_mode="circular"
+        ) 
         self.output_projection = nn.Conv1d(residual_channels, 2 * residual_channels, 1)
 
         nn.init.kaiming_normal_(self.conditioner_projection.weight)
@@ -93,8 +93,8 @@ class EpsilonTheta(nn.Module):
     ):
         super().__init__()
         self.input_projection = nn.Conv1d(
-            1, residual_channels, 1, padding=2, padding_mode="circular"
-        )
+            1, residual_channels, 1, padding=1, padding_mode="circular"
+        ) 
         self.diffusion_embedding = DiffusionEmbedding(
             time_emb_dim, proj_dim=residual_hidden
         )
@@ -111,8 +111,8 @@ class EpsilonTheta(nn.Module):
                 for i in range(residual_layers)
             ]
         )
-        self.skip_projection = nn.Conv1d(residual_channels, residual_channels, 3)
-        self.output_projection = nn.Conv1d(residual_channels, 1, 3)
+        self.skip_projection = nn.Conv1d(residual_channels, residual_channels, 3) 
+        self.output_projection = nn.Conv1d(residual_channels, 1, 1) 
 
         nn.init.kaiming_normal_(self.input_projection.weight)
         nn.init.kaiming_normal_(self.skip_projection.weight)
