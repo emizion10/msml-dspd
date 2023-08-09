@@ -114,11 +114,12 @@ class EpsilonTheta(nn.Module):
         )
         self.skip_projection = nn.Conv1d(residual_channels, residual_channels, 3) 
         self.output_projection = nn.Conv1d(residual_channels, 1, 1) 
+        # self.output_projection = nn.Conv1d(residual_channels, 1, 3,padding=1) 
 
         nn.init.kaiming_normal_(self.input_projection.weight)
         nn.init.kaiming_normal_(self.skip_projection.weight)
         nn.init.zeros_(self.output_projection.weight)
-
+    ## inputs(bs*pl,1,f), time(bs*pl), cond(bs*pl,1,hidd_dim)
     def forward(self, inputs, time, cond):
         x = self.input_projection(inputs)
         x = F.leaky_relu(x, 0.4)
@@ -131,6 +132,7 @@ class EpsilonTheta(nn.Module):
             skip.append(skip_connection)
 
         x = torch.sum(torch.stack(skip), dim=0) / math.sqrt(len(self.residual_layers))
+        ## x(1920,8,3)=>x(1920,8,1)
         x = self.skip_projection(x)
         x = F.leaky_relu(x, 0.4)
         x = self.output_projection(x)
