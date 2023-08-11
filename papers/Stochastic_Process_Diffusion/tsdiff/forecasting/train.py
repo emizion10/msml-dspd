@@ -329,7 +329,9 @@ def train(
     targets = list(ts_it)
 
     score = energy_score(
+        #(5,100,30,1)
         forecast=np.array([x.samples for x in forecasts]),
+        #(5,1,30,1)
         target=np.array([x[-forecast_horizon:] for x in targets])[:,None,...],
     )
 

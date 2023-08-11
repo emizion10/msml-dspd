@@ -31,6 +31,7 @@ class DiffusionEmbedding(nn.Module):
 
 
 class ResidualBlock(nn.Module):
+    ## hidden_size =64, residual_channel=8
     def __init__(self, hidden_size, residual_channels, dilation):
         super().__init__()
         self.dilated_conv = nn.Conv1d(
@@ -49,9 +50,11 @@ class ResidualBlock(nn.Module):
 
         nn.init.kaiming_normal_(self.conditioner_projection.weight)
         nn.init.kaiming_normal_(self.output_projection.weight)
-
+    ## x([1920, 8, 3]), conditioner([1920, 1, 1]), diffusion_step ([1920, 64])
     def forward(self, x, conditioner, diffusion_step):
+        ## diffusion_step ([1920, 64]) => diffusion_step ([1920, 8,1])
         diffusion_step = self.diffusion_projection(diffusion_step).unsqueeze(-1)
+        ## conditioner([1920, 1, 1])=> conditioner([1920, 16, 3]) 
         conditioner = self.conditioner_projection(conditioner)
 
         y = x + diffusion_step
@@ -112,8 +115,8 @@ class EpsilonTheta(nn.Module):
                 for i in range(residual_layers)
             ]
         )
-        self.skip_projection = nn.Conv1d(residual_channels, residual_channels, 3) 
-        self.output_projection = nn.Conv1d(residual_channels, 1, 1) 
+        self.skip_projection = nn.Conv1d(residual_channels, residual_channels, 2) 
+        self.output_projection = nn.Conv1d(residual_channels, 1, 2) 
         # self.output_projection = nn.Conv1d(residual_channels, 1, 3,padding=1) 
 
         nn.init.kaiming_normal_(self.input_projection.weight)
@@ -125,6 +128,7 @@ class EpsilonTheta(nn.Module):
         x = F.leaky_relu(x, 0.4)
 
         diffusion_step = self.diffusion_embedding(time)
+        ## cond(bs*pl,1,hidd_dim) => cond(bs*pl,1,f)
         cond_up = self.cond_upsampler(cond)
         skip = []
         for layer in self.residual_layers:
@@ -132,7 +136,7 @@ class EpsilonTheta(nn.Module):
             skip.append(skip_connection)
 
         x = torch.sum(torch.stack(skip), dim=0) / math.sqrt(len(self.residual_layers))
-        ## x(1920,8,3)=>x(1920,8,1)
+        ## x(1920,8,3)=>x(1920,8,1) [x(bs*pl,res_lay,lout from inp_proj)=>x(bs*pl,res_lay,lout from skip_pro)]
         x = self.skip_projection(x)
         x = F.leaky_relu(x, 0.4)
         x = self.output_projection(x)
