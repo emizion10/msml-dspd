@@ -58,7 +58,7 @@ class DiscreteDiffusion(nn.Module):
         else:
             noise = noise_gaussian
 
-        alpha = self.alphas[i.long()].to(x)
+        alpha = self.alphas.to(x)[i.long()].to(x)
         y = torch.sqrt(alpha) * x + torch.sqrt(1 - alpha) * noise
 
         if self.predict_gaussian_noise:

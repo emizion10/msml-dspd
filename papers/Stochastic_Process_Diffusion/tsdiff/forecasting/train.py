@@ -8,7 +8,13 @@ from gluonts.dataset.multivariate_grouper import MultivariateGrouper
 from gluonts.dataset.repository.datasets import get_dataset
 from gluonts.evaluation.backtest import make_evaluation_predictions
 from gluonts.evaluation import MultivariateEvaluator
+from pts.feature import (
+    lags_for_fourier_time_features_from_frequency,
+)
+from tsdiff.forecasting.plot import ( generate_dimension_plots, generate_plots)
+from tsdiff.forecasting.metrics import ( get_crps )
 
+import matplotlib.cm as cm
 from tsdiff.forecasting.models import (
     ScoreEstimator,
     TimeGradTrainingNetwork_AutoregressiveOld, TimeGradPredictionNetwork_AutoregressiveOld,
@@ -71,6 +77,10 @@ def train(
         # Eg:- For exchange_rate, Dim - [8,5471]
         dataset_train[i]['target'] = dataset_train[i]['target'][:, :-val_window]
 
+    min_y = np.min(dataset_train[0]['target'])
+    max_y = np.max(dataset_train[0]['target'])
+    y_buffer = 0.2 * (max_y-min_y)  
+
     start_timestamp =  dataset_train[0]['start']
     end_timestamp = start_timestamp + np.timedelta64(dataset_train[0]['target'].shape[1], 'D')
     timestamps = np.arange(start_timestamp, end_timestamp, dtype='datetime64[D]')
@@ -80,6 +90,7 @@ def train(
     plt.xlabel('Time')
     plt.ylabel('Value')
     plt.title('Multivariate Time Series')
+    plt.ylim(min_y-y_buffer, max_y+y_buffer)
     plt.legend()
     plt.grid(True)
     plt.savefig('train_data.png')
@@ -147,33 +158,47 @@ def train(
         #(5, 1, 30, 8)
         target=np.array([x[-dataset.metadata.prediction_length:] for x in targets])[:,None,...],
     )
+    forecast_horizon = dataset.metadata.prediction_length
+    lags_seq =  lags_for_fourier_time_features_from_frequency(freq_str=dataset.metadata.freq)
+    history_length = forecast_horizon + max(lags_seq)
 
-    test_start_timestamp =  dataset_test.list_data[0]['start']
-    test_end_timestamp = test_start_timestamp + np.timedelta64(30, 'D')
-    test_timestamps = np.arange(test_start_timestamp, test_end_timestamp, dtype='datetime64[D]')
-    predicted_sample = np.array([x.samples for x in forecasts])[0][0]
-    plt.figure(2)
-    for feature_idx in range(target_dim):
-        plt.plot(test_timestamps, predicted_sample[:, feature_idx], label=f'Feature {feature_idx + 1}')
-    plt.xlabel('Time')
-    plt.ylabel('Value')
-    plt.title('Multivariate Time Series Forecast')
-    plt.legend()
-    plt.grid(True)
-    plt.savefig('forecast.png')
-    plt.show()
+    generate_dimension_plots(forecast=np.array([x.samples for x in forecasts]),
+                             test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
+                             history_length=history_length,
+                             forecast_horizon=forecast_horizon,
+                             target_dim=target_dim,
+                             dataset='ER_Dimension',
+                             max_y=max_y,min_y=min_y,y_buffer=y_buffer)
+    
+    generate_dimension_plots(forecast=np.array([x.samples for x in forecasts]),
+                             test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
+                             history_length=history_length,
+                             forecast_horizon=forecast_horizon,
+                             target_dim=target_dim,
+                             dataset='ER_Dim_Sampled',
+                             sample_length=5,
+                             max_y=max_y,min_y=min_y,y_buffer=y_buffer)
+    
+    generate_plots(forecast=np.array([x.samples for x in forecasts]),
+                   test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
+                   history_length=history_length,
+                   forecast_horizon=forecast_horizon,
+                   target_dim=target_dim,
+                   dataset='ER',
+                   max_y=max_y,min_y=min_y,y_buffer=y_buffer)
+    
+    generate_plots(forecast=np.array([x.samples for x in forecasts]),
+                   test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
+                   history_length=history_length,
+                   forecast_horizon=forecast_horizon,
+                   target_dim=target_dim,
+                   dataset='ER_Sampled',
+                   sample_length=5,
+                   max_y=max_y,min_y=min_y,y_buffer=y_buffer)
+    
+    get_crps(forecast=np.array([x.samples for x in forecasts]),
+             test_truth=np.array([x[-dataset.metadata.prediction_length:] for x in targets])[:,None,...],)
 
-    actual_sample = np.array([x[-dataset.metadata.prediction_length:] for x in targets])[:,None,...][0][0]
-    plt.figure(3)
-    for feature_idx in range(target_dim):
-        plt.plot(test_timestamps, actual_sample[:, feature_idx], label=f'Feature {feature_idx + 1}')
-    plt.xlabel('Time')
-    plt.ylabel('Value')
-    plt.title('Multivariate Time Series Truth Value')
-    plt.legend()
-    plt.grid(True)
-    plt.savefig('test_truth_data.png')
-    plt.show()
 
     evaluator = MultivariateEvaluator(quantiles=(np.arange(20)/20.0)[1:], target_agg_funcs={'sum': np.sum})
     agg_metric, _ = evaluator(targets, forecasts, num_series=len(dataset_test))
