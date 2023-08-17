@@ -81,20 +81,20 @@ def train(
     max_y = np.max(dataset_train[0]['target'])
     y_buffer = 0.2 * (max_y-min_y)  
 
-    start_timestamp =  dataset_train[0]['start']
-    end_timestamp = start_timestamp + np.timedelta64(dataset_train[0]['target'].shape[1], 'D')
-    timestamps = np.arange(start_timestamp, end_timestamp, dtype='datetime64[D]')
-    plt.figure(1)
-    for feature_idx in range(target_dim):
-        plt.plot(timestamps, dataset_train[0]['target'][feature_idx, :], label=f'Feature {feature_idx + 1}')
-    plt.xlabel('Time')
-    plt.ylabel('Value')
-    plt.title('Multivariate Time Series')
-    plt.ylim(min_y-y_buffer, max_y+y_buffer)
-    plt.legend()
-    plt.grid(True)
-    plt.savefig('train_data.png')
-    plt.show()
+    # start_timestamp =  dataset_train[0]['start']
+    # end_timestamp = start_timestamp + np.timedelta64(dataset_train[0]['target'].shape[1], 'D')
+    # timestamps = np.arange(start_timestamp, end_timestamp, dtype='datetime64[D]')
+    # plt.figure(1)
+    # for feature_idx in range(target_dim):
+    #     plt.plot(timestamps, dataset_train[0]['target'][feature_idx, :], label=f'Feature {feature_idx + 1}')
+    # plt.xlabel('Time')
+    # plt.ylabel('Value')
+    # plt.title('Multivariate Time Series')
+    # plt.ylim(min_y-y_buffer, max_y+y_buffer)
+    # plt.legend()
+    # plt.grid(True)
+    # plt.savefig('train_data.png')
+    # plt.show()
 
     # Load model
     if network == 'timegrad':
@@ -158,17 +158,21 @@ def train(
         #(5, 1, 30, 8)
         target=np.array([x[-dataset.metadata.prediction_length:] for x in targets])[:,None,...],
     )
+
+    evaluator = MultivariateEvaluator(quantiles=(np.arange(20)/20.0)[1:], target_agg_funcs={'sum': np.sum})
+    agg_metric, _ = evaluator(targets, forecasts, num_series=len(dataset_test))
+
     forecast_horizon = dataset.metadata.prediction_length
     lags_seq =  lags_for_fourier_time_features_from_frequency(freq_str=dataset.metadata.freq)
     history_length = forecast_horizon + max(lags_seq)
 
-    generate_dimension_plots(forecast=np.array([x.samples for x in forecasts]),
-                             test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
-                             history_length=history_length,
-                             forecast_horizon=forecast_horizon,
-                             target_dim=target_dim,
-                             dataset='ER_Dimension',
-                             max_y=max_y,min_y=min_y,y_buffer=y_buffer)
+    # generate_dimension_plots(forecast=np.array([x.samples for x in forecasts]),
+    #                          test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
+    #                          history_length=history_length,
+    #                          forecast_horizon=forecast_horizon,
+    #                          target_dim=target_dim,
+    #                          dataset='ER_Dimension',
+    #                          max_y=max_y,min_y=min_y,y_buffer=y_buffer)
     
     generate_dimension_plots(forecast=np.array([x.samples for x in forecasts]),
                              test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
@@ -179,13 +183,13 @@ def train(
                              sample_length=5,
                              max_y=max_y,min_y=min_y,y_buffer=y_buffer)
     
-    generate_plots(forecast=np.array([x.samples for x in forecasts]),
-                   test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
-                   history_length=history_length,
-                   forecast_horizon=forecast_horizon,
-                   target_dim=target_dim,
-                   dataset='ER',
-                   max_y=max_y,min_y=min_y,y_buffer=y_buffer)
+    # generate_plots(forecast=np.array([x.samples for x in forecasts]),
+    #                test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
+    #                history_length=history_length,
+    #                forecast_horizon=forecast_horizon,
+    #                target_dim=target_dim,
+    #                dataset='ER',
+    #                max_y=max_y,min_y=min_y,y_buffer=y_buffer)
     
     generate_plots(forecast=np.array([x.samples for x in forecasts]),
                    test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
@@ -197,11 +201,7 @@ def train(
                    max_y=max_y,min_y=min_y,y_buffer=y_buffer)
     
     get_crps(forecast=np.array([x.samples for x in forecasts]),
-             test_truth=np.array([x[-dataset.metadata.prediction_length:] for x in targets])[:,None,...],)
-
-
-    evaluator = MultivariateEvaluator(quantiles=(np.arange(20)/20.0)[1:], target_agg_funcs={'sum': np.sum})
-    agg_metric, _ = evaluator(targets, forecasts, num_series=len(dataset_test))
+             test_truth=np.array([x[-forecast_horizon:] for x in targets])[:,None,...],)
 
     metrics = dict(
         CRPS=agg_metric['mean_wQuantileLoss'],
