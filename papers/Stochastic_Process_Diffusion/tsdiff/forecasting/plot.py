@@ -6,7 +6,7 @@ import numpy as np
 
 def generate_plots(test_truth,forecast,history_length,forecast_horizon,target_dim,dataset,min_y,max_y,y_buffer,sample_length=100):
     colors = cm.get_cmap('tab10', target_dim)
-    x_sample = np.arange(0,forecast_horizon+history_length)
+    x_sample = np.arange(1,forecast_horizon+history_length+1)
     for sample_idx in range(len(test_truth)):
         plt.figure(sample_idx + 1,figsize=(15,6))  # Create a new figure for each sample
         truth_sample=test_truth[sample_idx][0]
@@ -43,7 +43,7 @@ def generate_plots(test_truth,forecast,history_length,forecast_horizon,target_di
 
 
 def generate_dimension_plots(test_truth,forecast,history_length,forecast_horizon,target_dim,dataset,min_y,max_y,y_buffer,sample_length=100):
-    x_sample = np.arange(0,forecast_horizon+history_length)
+    x_sample = np.arange(1,forecast_horizon+history_length+1)
     colors = cm.get_cmap('tab10', target_dim)
 
     # Set low opacity value
@@ -70,20 +70,24 @@ def generate_dimension_plots(test_truth,forecast,history_length,forecast_horizon
             for forecast_idx in range(sample_length):
                 forecast_sample = forecast_samples[forecast_idx, :, dim]
                 ax.plot(x_sample[history_length:],forecast_sample, color=color, alpha=opacity)
-                ax.axvline(x=history_length, color='r', linestyle='--') 
-                ax.set_ylim(min_y - y_buffer, max_y + y_buffer)
-                ax.grid(True)
 
-        axes[-1].set_xlabel("Time")
-        plt.title(f'{dataset} Time Series - Sample {sample_idx + 1}')
-        plt.tight_layout()
+            ax.axvline(x=history_length, color='r', linestyle='--') 
+            ax.set_ylim(min_y - y_buffer, max_y + y_buffer)
+            ax.grid(True)
+            ax.set_xlabel("Time")
+            ax.set_xticks(x_sample)
+            ax.set_xticklabels(x_sample)
+            ax.tick_params(axis='x', rotation=45)
+
+        plt.suptitle(f'{dataset} Time Series - Sample {sample_idx + 1}')
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
         plt.savefig(f'{dataset}_sample_{sample_idx + 1}.png')  # Save the plot as an image
         plt.show() 
 
 
 # forecast_horizon=30
 # history_length=32
-# target_dim=8
+# target_dim=4
 
 # x_sample = np.arange(0,forecast_horizon+history_length)
 # test_truth = np.random.rand(5,1,62,target_dim)

@@ -166,30 +166,31 @@ def train(
     lags_seq =  lags_for_fourier_time_features_from_frequency(freq_str=dataset.metadata.freq)
     history_length = forecast_horizon + max(lags_seq)
 
-    # generate_dimension_plots(forecast=np.array([x.samples for x in forecasts]),
-    #                          test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
-    #                          history_length=history_length,
-    #                          forecast_horizon=forecast_horizon,
-    #                          target_dim=target_dim,
-    #                          dataset='ER_Dimension',
-    #                          max_y=max_y,min_y=min_y,y_buffer=y_buffer)
+    if(target_dim<10):
+        generate_dimension_plots(forecast=np.array([x.samples for x in forecasts]),
+                                test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
+                                history_length=history_length,
+                                forecast_horizon=forecast_horizon,
+                                target_dim=target_dim,
+                                dataset='ER_Dimension',
+                                max_y=max_y,min_y=min_y,y_buffer=y_buffer)
+        
+        generate_dimension_plots(forecast=np.array([x.samples for x in forecasts]),
+                                test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
+                                history_length=history_length,
+                                forecast_horizon=forecast_horizon,
+                                target_dim=target_dim,
+                                dataset='ER_Dim_Sampled',
+                                sample_length=5,
+                                max_y=max_y,min_y=min_y,y_buffer=y_buffer)
     
-    generate_dimension_plots(forecast=np.array([x.samples for x in forecasts]),
-                             test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
-                             history_length=history_length,
-                             forecast_horizon=forecast_horizon,
-                             target_dim=target_dim,
-                             dataset='ER_Dim_Sampled',
-                             sample_length=5,
-                             max_y=max_y,min_y=min_y,y_buffer=y_buffer)
-    
-    # generate_plots(forecast=np.array([x.samples for x in forecasts]),
-    #                test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
-    #                history_length=history_length,
-    #                forecast_horizon=forecast_horizon,
-    #                target_dim=target_dim,
-    #                dataset='ER',
-    #                max_y=max_y,min_y=min_y,y_buffer=y_buffer)
+    generate_plots(forecast=np.array([x.samples for x in forecasts]),
+                   test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
+                   history_length=history_length,
+                   forecast_horizon=forecast_horizon,
+                   target_dim=target_dim,
+                   dataset='ER',
+                   max_y=max_y,min_y=min_y,y_buffer=y_buffer)
     
     generate_plots(forecast=np.array([x.samples for x in forecasts]),
                    test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
