@@ -9,7 +9,11 @@ from gluonts.dataset.common import ListDataset
 from gluonts.dataset.field_names import FieldName
 from gluonts.evaluation.backtest import make_evaluation_predictions
 from gluonts.evaluation import MultivariateEvaluator,Evaluator
-
+from pts.feature import (
+    lags_for_fourier_time_features_from_frequency,
+)
+from tsdiff.forecasting.plot import ( generate_plots)
+from tsdiff.forecasting.metrics import ( get_crps )
 from tsdiff.forecasting.models import (
     ScoreEstimator,
     TimeGradTrainingNetwork_AutoregressiveOld, TimeGradPredictionNetwork_AutoregressiveOld,
@@ -247,7 +251,7 @@ def train(
 
     # Slicing original dataset to training & validation arrays
     # val_window = 20 * dataset.metadata.prediction_length
-    val_window = 20 * forecast_horizon
+    val_window = int(0.2 * len(univariate_data))
     dataset_train = list(dataset_train)
     dataset_val = []
     for i in range(len(dataset_train)):
@@ -257,6 +261,10 @@ def train(
         dataset_val.append(x)
         # Eg:- For exchange_rate, Dim - [8,5471]
         dataset_train[i]['target'] = dataset_train[i]['target'][:, :-val_window]
+
+    min_y = np.min(dataset_train[0]['target'])
+    max_y = np.max(dataset_train[0]['target'])
+    y_buffer = 0.2 * (max_y-min_y)  
 
     end_timestamp = start_timestamp + np.timedelta64(dataset_train[0]['target'].shape[1], 'D')
     timestamps = np.arange(start_timestamp, end_timestamp, dtype='datetime64[D]')
@@ -335,34 +343,29 @@ def train(
         target=np.array([x[-forecast_horizon:] for x in targets])[:,None,...],
     )
 
-    test_end_timestamp = test_start_timestamp + np.timedelta64(forecast_horizon, 'D')
-    test_timestamps = np.arange(test_start_timestamp, test_end_timestamp, dtype='datetime64[D]')
-    # predicted_sample = np.array([x.samples for x in forecasts])[0][0]
-    # TODO: same feature legend across samples
-    predicted_samples = np.array([x.samples for x in forecasts])[0]
-    plt.figure(2)
-    for i in range(len(predicted_samples)):
-        for feature_idx in range(target_dim):
-            plt.plot(test_timestamps, predicted_samples[i, :, feature_idx], label=f'Feature {feature_idx + 1}', alpha=1 / (i + 1))
-    plt.xlabel('Time')
-    plt.ylabel('Value')
-    plt.title('Multivariate Time Series Forecast')
-    # plt.legend()
-    plt.grid(True)
-    plt.savefig('forecast.png')
-    plt.show()
+    lags_seq =  lags_for_fourier_time_features_from_frequency(freq_str='D')
+    history_length = forecast_horizon + max(lags_seq)
 
-    actual_sample = np.array([x[-forecast_horizon:] for x in targets])[:,None,...][0][0]
-    plt.figure(3)
-    for feature_idx in range(target_dim):
-        plt.plot(test_timestamps, actual_sample[:, feature_idx], label=f'Feature {feature_idx + 1}')
-    plt.xlabel('Time')
-    plt.ylabel('Value')
-    plt.title('Multivariate Time Series Truth Value')
-    plt.legend()
-    plt.grid(True)
-    plt.savefig('test_truth_data.png')
-    plt.show()
+    generate_plots(forecast=np.array([x.samples for x in forecasts]),
+                   test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
+                   history_length=history_length,
+                   forecast_horizon=forecast_horizon,
+                   target_dim=target_dim,
+                   dataset='ER',
+                   max_y=max_y,min_y=min_y,y_buffer=y_buffer)
+
+    generate_plots(forecast=np.array([x.samples for x in forecasts]),
+                   test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
+                   history_length=history_length,
+                   forecast_horizon=forecast_horizon,
+                   target_dim=target_dim,
+                   dataset='ER_Sampled',
+                   sample_length=5,
+                   max_y=max_y,min_y=min_y,y_buffer=y_buffer)
+
+    get_crps(forecast=np.array([x.samples for x in forecasts]),
+             test_truth=np.array([x[-forecast_horizon:] for x in targets])[:,None,...],)
+
 
     evaluator = Evaluator(quantiles=(np.arange(20)/20.0)[1:])
     agg_metric, _ = evaluator(targets, forecasts, num_series=len(dataset_test))
