@@ -75,26 +75,26 @@ def train(
         # Eg:- For exchange_rate, Dim - [8,600]
         dataset_val.append(x)
         # Eg:- For exchange_rate, Dim - [8,5471]
-        dataset_train[i]['target'] = dataset_train[i]['target'][:, :-val_window]
+        dataset_train[i]['target'] = dataset_train[i]['target'][:,:-val_window]
 
     min_y = np.min(dataset_train[0]['target'])
     max_y = np.max(dataset_train[0]['target'])
     y_buffer = 0.2 * (max_y-min_y)  
 
-    # start_timestamp =  dataset_train[0]['start']
-    # end_timestamp = start_timestamp + np.timedelta64(dataset_train[0]['target'].shape[1], 'D')
-    # timestamps = np.arange(start_timestamp, end_timestamp, dtype='datetime64[D]')
-    # plt.figure(1)
-    # for feature_idx in range(target_dim):
-    #     plt.plot(timestamps, dataset_train[0]['target'][feature_idx, :], label=f'Feature {feature_idx + 1}')
-    # plt.xlabel('Time')
-    # plt.ylabel('Value')
-    # plt.title('Multivariate Time Series')
-    # plt.ylim(min_y-y_buffer, max_y+y_buffer)
-    # plt.legend()
-    # plt.grid(True)
-    # plt.savefig('train_data.png')
-    # plt.show()
+    start_timestamp =  dataset_train[0]['start']
+    end_timestamp = start_timestamp + np.timedelta64(dataset_train[0]['target'].shape[1], 'D')
+    timestamps = np.arange(start_timestamp, end_timestamp, dtype='datetime64[D]')
+    plt.figure(1)
+    for feature_idx in range(target_dim):
+        plt.plot(timestamps, dataset_train[0]['target'][feature_idx, :], label=f'Feature {feature_idx + 1}')
+    plt.xlabel('Time')
+    plt.ylabel('Value')
+    plt.title('Multivariate Time Series')
+    plt.ylim(min_y-y_buffer, max_y+y_buffer)
+    plt.legend()
+    plt.grid(True)
+    plt.savefig('train_data.png')
+    plt.show()
 
     # Load model
     if network == 'timegrad':
