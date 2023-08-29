@@ -84,6 +84,69 @@ def generate_dimension_plots(test_truth,forecast,history_length,forecast_horizon
         plt.savefig(f'{dataset}_sample_{sample_idx + 1}.png')  # Save the plot as an image
         plt.show() 
 
+def generateDataPlots(target_dim, dataset_train, dataset_val, dataset_test):
+    colors = cm.get_cmap('tab10', min(target_dim,12))
+    x_sample = np.arange(0,len(dataset_test.list_data[-1]['target'][0]))
+    min_y = np.min(dataset_train[0]['target'])
+    max_y = np.max(dataset_train[0]['target'])
+    y_buffer = 0.2 * (max_y-min_y)  
+    train_length = len(dataset_train[0]['target'][0])
+    val_length = len(dataset_val[0]['target'][0])
+    plt.figure(100)
+    for dim in range(target_dim):
+        if(target_dim>10):
+            feature_idx = (dim+1) * (target_dim//10)
+        else:
+            feature_idx = dim
+        if feature_idx< target_dim:
+            color = colors(dim)
+            plt.plot(x_sample, dataset_test.list_data[-1]['target'][feature_idx, :], color=color, alpha=0.7)
+            plt.plot(x_sample[train_length:train_length+val_length], dataset_val[0]['target'][feature_idx, :], color=color, alpha=0.5)
+            plt.plot(x_sample[:train_length], dataset_train[0]['target'][feature_idx, :], label=f'Feature {feature_idx + 1}', color=color)
+        else:
+            break
+    plt.xlabel('Time')
+    plt.ylabel('Value')
+    plt.title('Multivariate Time Series')
+    plt.ylim(min_y-y_buffer, max_y+y_buffer)
+    plt.axvline(x=train_length, color='r', linestyle='--') 
+    plt.axvline(x=train_length+val_length, color='b', linestyle='--') 
+    plt.legend()
+    plt.grid(True)
+    plt.savefig('train_data.png')
+    plt.show()
+    plotHistogram(target_dim, dataset_train, dataset_val, dataset_test)
+
+def plotHistogram(target_dim, dataset_train, dataset_val, dataset_test):
+        colors = cm.get_cmap('tab10', target_dim) 
+        for dim in range(target_dim):
+            if(target_dim>10):
+                feature_idx = (dim+1) * (target_dim//10)
+            else:
+                feature_idx = dim
+            if feature_idx< target_dim:
+                plt.figure(dim + 1)
+                fig, axes = plt.subplots(1,3, figsize=(6, 2))
+                # color = colors(dim)
+                min_y = np.min(dataset_train[0]['target'][feature_idx, :])
+                max_y = np.max(dataset_train[0]['target'][feature_idx, :])
+                axes[0].hist(dataset_train[0]['target'][feature_idx, :],bins=20, color='blue', alpha=0.7) 
+                axes[0].set_xlim([min_y, max_y])
+                axes[0].set_title('Training Data')
+
+                axes[1].hist(dataset_val[0]['target'][feature_idx, :],bins=20, color='green', alpha=0.7) 
+                axes[1].set_xlim([min_y, max_y])
+                axes[1].set_title('Validation Data')
+
+                axes[2].hist(dataset_test.list_data[-1]['target'][feature_idx, :],bins=20, color='red', alpha=0.7)  
+                axes[2].set_xlim([min_y, max_y])
+                axes[2].set_title('Test Data')
+
+                plt.suptitle(f'Time Series ')
+                plt.tight_layout(rect=[0, 0, 1, 0.95])
+                # plt.savefig(f'{dataset}_sample_{sample_idx + 1}.png')  # Save the plot as an image
+                plt.show() 
+
 
 # forecast_horizon=30
 # history_length=32
