@@ -126,7 +126,7 @@ def train(
             device=device,
             epochs=epochs,
             learning_rate=learning_rate,
-            num_batches_per_epoch=10,
+            num_batches_per_epoch=100,
             batch_size=batch_size,
             patience=10,
         ),
