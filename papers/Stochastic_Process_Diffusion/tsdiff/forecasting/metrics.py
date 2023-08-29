@@ -21,7 +21,7 @@ def get_crps(forecast,test_truth):
     crps_array= calc_crps_sample(test_truth_reshaped,forecast_reshaped)
     crps = np.mean(crps_array)
     crps_mean_sample = np.mean(crps_array,axis=1)
-    print('CRPS', crps)
+    print('Custom CRPS Score', crps)
     print('CRPS along samples',crps_mean_sample)
     return crps
 
