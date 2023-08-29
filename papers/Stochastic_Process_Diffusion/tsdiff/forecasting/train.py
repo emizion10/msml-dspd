@@ -2,12 +2,19 @@ import argparse
 import numpy as np
 import torch
 from copy import deepcopy
+import matplotlib.pyplot as plt
 
 from gluonts.dataset.multivariate_grouper import MultivariateGrouper
 from gluonts.dataset.repository.datasets import get_dataset
 from gluonts.evaluation.backtest import make_evaluation_predictions
 from gluonts.evaluation import MultivariateEvaluator
+from pts.feature import (
+    lags_for_fourier_time_features_from_frequency,
+)
+from tsdiff.forecasting.plot import ( generate_dimension_plots, generate_plots,generateDataPlots)
+from tsdiff.forecasting.metrics import ( get_crps )
 
+import matplotlib.cm as cm
 from tsdiff.forecasting.models import (
     ScoreEstimator,
     TimeGradTrainingNetwork_AutoregressiveOld, TimeGradPredictionNetwork_AutoregressiveOld,
@@ -46,12 +53,12 @@ def train(
 ):
     np.random.seed(seed)
     torch.manual_seed(seed)
-
+    ## exchange_rate_nips have daily freq, rest everything has hourly
     covariance_dim = 4 if dataset != 'exchange_rate_nips' else -4
 
     # Load data
     dataset = get_dataset(dataset, regenerate=False)
-
+    ## Eg:- For exchange_rate, target_dim = 8
     target_dim = int(dataset.metadata.feat_static_cat[0].cardinality)
 
     train_grouper = MultivariateGrouper(max_target_dim=min(2000, target_dim))
@@ -65,8 +72,17 @@ def train(
     for i in range(len(dataset_train)):
         x = deepcopy(dataset_train[i])
         x['target'] = x['target'][:,-val_window:]
+        # Eg:- For exchange_rate, Dim - [8,600]
         dataset_val.append(x)
+        # Eg:- For exchange_rate, Dim - [8,5471]
         dataset_train[i]['target'] = dataset_train[i]['target'][:,:-val_window]
+
+    min_y = np.min(dataset_train[0]['target'])
+    max_y = np.max(dataset_train[0]['target'])
+    y_buffer = 0.2 * (max_y-min_y)  
+
+    generateDataPlots(target_dim,dataset_train,dataset_val,dataset_test,dataset_name='ER')
+
 
     # Load model
     if network == 'timegrad':
@@ -123,14 +139,57 @@ def train(
     forecast_it, ts_it = make_evaluation_predictions(dataset=dataset_test, predictor=predictor, num_samples=100)
     forecasts = list(forecast_it)
     targets = list(ts_it)
-
+    # forecasts[0].samples[0] has first prediction sample
     score = energy_score(
+        #(5, 100, 30, 8)
         forecast=np.array([x.samples for x in forecasts]),
+        #(5, 1, 30, 8)
         target=np.array([x[-dataset.metadata.prediction_length:] for x in targets])[:,None,...],
     )
 
     evaluator = MultivariateEvaluator(quantiles=(np.arange(20)/20.0)[1:], target_agg_funcs={'sum': np.sum})
     agg_metric, _ = evaluator(targets, forecasts, num_series=len(dataset_test))
+
+    forecast_horizon = dataset.metadata.prediction_length
+    lags_seq =  lags_for_fourier_time_features_from_frequency(freq_str=dataset.metadata.freq)
+    history_length = forecast_horizon + max(lags_seq)
+
+    generate_dimension_plots(forecast=np.array([x.samples for x in forecasts]),
+                            test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
+                            history_length=history_length,
+                            forecast_horizon=forecast_horizon,
+                            target_dim=target_dim,
+                            dataset='ER_Dim',
+                            max_y=max_y,min_y=min_y,y_buffer=y_buffer)
+    
+    generate_dimension_plots(forecast=np.array([x.samples for x in forecasts]),
+                            test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
+                            history_length=history_length,
+                            forecast_horizon=forecast_horizon,
+                            target_dim=target_dim,
+                            dataset='ER_Dim_Sampled',
+                            sample_length=5,
+                            max_y=max_y,min_y=min_y,y_buffer=y_buffer)
+    
+    generate_plots(forecast=np.array([x.samples for x in forecasts]),
+                   test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
+                   history_length=history_length,
+                   forecast_horizon=forecast_horizon,
+                   target_dim=target_dim,
+                   dataset='ER',
+                   max_y=max_y,min_y=min_y,y_buffer=y_buffer)
+    
+    generate_plots(forecast=np.array([x.samples for x in forecasts]),
+                   test_truth=np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...],
+                   history_length=history_length,
+                   forecast_horizon=forecast_horizon,
+                   target_dim=target_dim,
+                   dataset='ER_Sampled',
+                   sample_length=5,
+                   max_y=max_y,min_y=min_y,y_buffer=y_buffer)
+    
+    get_crps(forecast=np.array([x.samples for x in forecasts]),
+             test_truth=np.array([x[-forecast_horizon:] for x in targets])[:,None,...],)
 
     metrics = dict(
         CRPS=agg_metric['mean_wQuantileLoss'],

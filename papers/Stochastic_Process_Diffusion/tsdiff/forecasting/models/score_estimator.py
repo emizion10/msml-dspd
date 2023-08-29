@@ -113,7 +113,7 @@ class ScoreEstimator(PyTorchEstimator):
             if time_features is not None
             else fourier_time_features_from_frequency(self.freq)
         )
-
+        ## For exchange rate, history_length = 30 + 2 = 32
         self.history_length = self.context_length + max(self.lags_seq)
         self.pick_incomplete = pick_incomplete
         self.scaling = scaling
@@ -252,6 +252,7 @@ class ScoreEstimator(PyTorchEstimator):
             lags_seq=self.lags_seq,
             scaling=self.scaling,
             conditioning_length=self.conditioning_length,
+            ## Only difference in parameters w.r.t training network
             num_parallel_samples=self.num_parallel_samples,
             time_feat_dim=self.time_feat_dim,
         ).to(device)

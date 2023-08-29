@@ -67,7 +67,7 @@ class ResidualBlock(nn.Module):
 
 
 class CondUpsampler(nn.Module):
-    def __init__(self, cond_length, target_dim):
+    def __init__(self, cond_length, target_dim): #100,8
         super().__init__()
         self.linear1 = nn.Linear(cond_length, target_dim // 2)
         self.linear2 = nn.Linear(target_dim // 2, target_dim)
@@ -83,8 +83,8 @@ class CondUpsampler(nn.Module):
 class EpsilonTheta(nn.Module):
     def __init__(
         self,
-        target_dim,
-        cond_length,
+        target_dim, ## dimensionality, for ER=8
+        cond_length, ## hidden_dim = 100 by default
         time_emb_dim=16,
         residual_layers=8,
         residual_channels=8,
@@ -117,12 +117,13 @@ class EpsilonTheta(nn.Module):
         nn.init.kaiming_normal_(self.input_projection.weight)
         nn.init.kaiming_normal_(self.skip_projection.weight)
         nn.init.zeros_(self.output_projection.weight)
-
+    ## TODO: cond refers to the latent
     def forward(self, inputs, time, cond):
         x = self.input_projection(inputs)
         x = F.leaky_relu(x, 0.4)
 
         diffusion_step = self.diffusion_embedding(time)
+        ## cond[1920,1,100]=>cond[1920,1,8]
         cond_up = self.cond_upsampler(cond)
         skip = []
         for layer in self.residual_layers:

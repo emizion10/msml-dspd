@@ -58,7 +58,7 @@ class DiscreteDiffusion(nn.Module):
         else:
             noise = noise_gaussian
 
-        alpha = self.alphas[i.long()].to(x)
+        alpha = self.alphas.to(x)[i.long()].to(x)
         y = torch.sqrt(alpha) * x + torch.sqrt(1 - alpha) * noise
 
         if self.predict_gaussian_noise:
@@ -72,7 +72,7 @@ class DiscreteDiffusion(nn.Module):
         x: TensorType[..., 'dim'],
         **kwargs,
     ) -> TensorType[..., 'dim']:
-
+        ## Shape of i for ER [64,30,1], (batch_size,prediction_length,1)
         i = torch.randint(0, self.num_steps, size=(x.shape[0],))
         i = i.view(-1, *(1,) * len(x.shape[1:])).expand_as(x[...,:1]).to(x)
 

@@ -39,9 +39,10 @@ class DenoiseWrapper(nn.Module):
 
         if self.time_input:
             x = x + self.time_embedding(t.squeeze(-1).long())
-
+        ## x(64,30,8)=>x(1920,1,8)
         x = x.view(-1, 1, x.shape[-1])
         i = i.view(-1).long()
+        ## latent(64,30,100)=>latent(1920,1,100)
         latent = latent.reshape(-1, 1, latent.shape[-1])
 
         y = self.denoise_fn(x, i, latent)
@@ -63,6 +64,7 @@ class TimeGradTrainingNetwork_All(TimeGradTrainingNetwork):
         super().__init__(**kwargs)
 
         self.time_input = (self.noise != 'normal')
+        ## num_cells=100 by default,  conditioning_length = hidden_dim (i.e 100 by default)
         self.rnn_state_proj = nn.Linear(args.num_cells, args.conditioning_length)
 
         if self.noise == 'normal':
@@ -87,6 +89,7 @@ class TimeGradTrainingNetwork_All(TimeGradTrainingNetwork):
         self.denoise_fn = DenoiseWrapper(denoise_fn, args.target_dim, self.time_input)
 
     def get_rnn_state(self, **kwargs):
+        ## Returns outputs and scale of the RNN encoder which encodes the past & future data available
         rnn_outputs, _, scale, _, _ = self.unroll_encoder(**kwargs)
         rnn_outputs = self.rnn_state_proj(rnn_outputs)
         return rnn_outputs, scale
@@ -109,6 +112,7 @@ class TimeGradTrainingNetwork_All(TimeGradTrainingNetwork):
             past_observed_values=past_observed_values,
             past_is_pad=past_is_pad,
             future_time_feat=future_time_feat,
+            ## For ER, Dim- (64,30,8)->(batch_size,prediction_length,feature_dimension) 
             future_target_cdf=None,
             target_dimension_indicator=target_dimension_indicator,
         )
@@ -117,10 +121,12 @@ class TimeGradTrainingNetwork_All(TimeGradTrainingNetwork):
         std = past_target_cdf[...,-self.prediction_length:,:].std(1, keepdim=True).clamp(1e-4)
 
         # target = future_target_cdf[...,-self.prediction_length:,:] / scale
+        ## Normalization with mean & std of past_target_cdf
         target = (future_target_cdf[...,-self.prediction_length:,:] - mean) / std
         # target = (future_target_cdf[...,-self.prediction_length:,:] - past_target_cdf[...,-1:,:] - mean) / std
         # target = (future_target_cdf[...,-self.prediction_length:,:] - past_target_cdf[...,-1:,:]) / scale
 
+        ## Dim for ER [64,30,1]
         t = torch.arange(self.prediction_length).view(1, -1, 1).repeat(target.shape[0], 1, 1).to(target)
         loss = self.diffusion.get_loss(self.denoise_fn, target, t=t, latent=latent, future_time_feat=future_time_feat)
 
@@ -343,9 +349,10 @@ class TimeGradTrainingNetwork_Transformer(TimeGradTrainingNetwork_All):
         self.transformer_decoder = nn.TransformerDecoder(decoder_layer, num_layers=2)
 
     def get_rnn_state(self, **kwargs):
+        ## Returns outputs and scale of the RNN encoder which encodes the past & future data available
         states, _, scale, _, _ = self.unroll_encoder(**kwargs)
         states = self.rnn_state_proj(states)
-
+        # t - dim[64,30]->(batch_size,pred_length)
         t = torch.arange(self.prediction_length).view(1, -1).repeat(states.shape[0], 1).to(states)
         t = self.pos_enc(t.long())
 
