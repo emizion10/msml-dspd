@@ -212,6 +212,7 @@ def train(
 ):
     np.random.seed(seed)
     torch.manual_seed(seed)
+    min_max_scaling = True
 
     # TODO: Find the reason for this logic
     covariance_dim = 4 if dataset != 'exchange_rate_nips' else -4
@@ -267,12 +268,21 @@ def train(
 
     generateDataPlots(target_dim,dataset_train,dataset_val,dataset_test,dataset_name='Gold')
 
-    mean = np.mean(dataset_train[0]['target'])
-    std = np.std(dataset_train[0]['target'])
-    dataset_train[0]['target'] = (dataset_train[0]['target'] - mean) / std
-    dataset_val[0]['target'] = (dataset_val[0]['target'] - mean) / std
-    for i in range(len(dataset_test.list_data)):
-        dataset_test.list_data[i]['target'] = (dataset_test.list_data[i]['target'] - mean) / std
+    if(min_max_scaling):
+        min_value = np.min(dataset_train[0]['target'])
+        max_value = np.max(dataset_train[0]['target'])
+        dataset_train[0]['target'] = (dataset_train[0]['target'] - min_value) / (max_value - min_value)
+        dataset_val[0]['target'] = (dataset_val[0]['target'] - min_value) / (max_value - min_value)
+        for i in range(len(dataset_test.list_data)):
+            dataset_test.list_data[i]['target'] = (dataset_test.list_data[i]['target'] - min_value) / (max_value - min_value)
+    else:
+        mean = np.mean(dataset_train[0]['target'])
+        std = np.std(dataset_train[0]['target'])
+        dataset_train[0]['target'] = (dataset_train[0]['target'] - mean) / std
+        dataset_val[0]['target'] = (dataset_val[0]['target'] - mean) / std
+        for i in range(len(dataset_test.list_data)):
+            dataset_test.list_data[i]['target'] = (dataset_test.list_data[i]['target'] - mean) / std
+
     # Load model
     if network == 'timegrad':
         if noise != 'normal':
@@ -317,7 +327,7 @@ def train(
             device=device,
             epochs=epochs,
             learning_rate=learning_rate,
-            num_batches_per_epoch=10,
+            num_batches_per_epoch=100,
             batch_size=batch_size,
             patience=10,
         ),
@@ -330,18 +340,18 @@ def train(
     forecasts = list(forecast_it)
     targets = list(ts_it)
 
-    score = energy_score(
-        #(5,100,30,1)
-        forecast=(np.array([x.samples for x in forecasts]) * std) + mean,
-        #(5,1,30,1)
-        target=(np.array([x[-forecast_horizon:] for x in targets])[:,None,...] * std) + mean,
-    )
-
     lags_seq =  lags_for_fourier_time_features_from_frequency(freq_str='D')
     history_length = forecast_horizon + max(lags_seq)
 
-    generate_plots(forecast=(np.array([x.samples for x in forecasts]) * std) + mean,
-                   test_truth=(np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...] * std) + mean,
+    if(min_max_scaling):
+        score = energy_score(
+            #(5,100,30,1)
+            forecast=(np.array([x.samples for x in forecasts]) * (max_value - min_value)) + min_value,
+            #(5,1,30,1)
+            target=(np.array([x[-forecast_horizon:] for x in targets])[:,None,...] * (max_value - min_value)) + min_value,
+        )
+        generate_plots(forecast=(np.array([x.samples for x in forecasts]) * (max_value - min_value)) + min_value,
+                   test_truth=(np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...] * (max_value - min_value)) + min_value,
                    history_length=history_length,
                    forecast_horizon=forecast_horizon,
                    target_dim=target_dim,
@@ -349,9 +359,24 @@ def train(
                    max_y=max_y,min_y=min_y,y_buffer=y_buffer)
 
 
-    get_crps(forecast=(np.array([x.samples for x in forecasts]) * std) + mean,
-             test_truth=(np.array([x[-forecast_horizon:] for x in targets])[:,None,...]*std)+mean)
-
+        get_crps(forecast=(np.array([x.samples for x in forecasts]) * (max_value - min_value)) + min_value,
+                test_truth=(np.array([x[-forecast_horizon:] for x in targets])[:,None,...] * (max_value - min_value)) + min_value)
+    else:
+        score = energy_score(
+            #(5,100,30,1)
+            forecast=(np.array([x.samples for x in forecasts]) * std) + mean,
+            #(5,1,30,1)
+            target=(np.array([x[-forecast_horizon:] for x in targets])[:,None,...] * std) + mean,
+        )
+        generate_plots(forecast=(np.array([x.samples for x in forecasts]) * std) + mean,
+                   test_truth=(np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...] * std) + mean,
+                   history_length=history_length,
+                   forecast_horizon=forecast_horizon,
+                   target_dim=target_dim,
+                   dataset='Gold',
+                   max_y=max_y,min_y=min_y,y_buffer=y_buffer)
+        get_crps(forecast=(np.array([x.samples for x in forecasts]) * std) + mean,
+                test_truth=(np.array([x[-forecast_horizon:] for x in targets])[:,None,...] * std) + mean)
 
     evaluator = Evaluator(quantiles=(np.arange(20)/20.0)[1:])
     agg_metric, _ = evaluator(targets, forecasts, num_series=len(dataset_test))
