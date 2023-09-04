@@ -3,8 +3,29 @@ import matplotlib.cm as cm
 import numpy as np
 
 
+def generate_plots(test_truth,forecast,history_length,forecast_horizon,target_dim,dataset,min_y,max_y,y_buffer):
+    generateForecastPlots(forecast=forecast,
+                   test_truth=test_truth,
+                   history_length=history_length,
+                   forecast_horizon=forecast_horizon,
+                   target_dim=target_dim,
+                   dataset=dataset,
+                   max_y=max_y,min_y=min_y,y_buffer=y_buffer)
+    
+    generateForecastPlots(forecast=forecast,
+                   test_truth=test_truth,
+                   history_length=history_length,
+                   forecast_horizon=forecast_horizon,
+                   target_dim=target_dim,
+                   dataset=f'{dataset}_Sampled',
+                   sample_length=5,
+                   max_y=max_y,min_y=min_y,y_buffer=y_buffer)
+    generateQuantilePlots(forecast=forecast,test_truth=test_truth,history_length=history_length,forecast_horizon=forecast_horizon,target_dim=target_dim, dataset=dataset,max_y=max_y,min_y=min_y,y_buffer=y_buffer)
+    generateForecastHistograms(forecast=forecast,test_truth=test_truth, dataset=dataset,max_y=max_y,min_y=min_y)
 
-def generate_plots(test_truth,forecast,history_length,forecast_horizon,target_dim,dataset,min_y,max_y,y_buffer,sample_length=100):
+
+
+def generateForecastPlots(test_truth,forecast,history_length,forecast_horizon,target_dim,dataset,min_y,max_y,y_buffer,sample_length=100):
     colors = cm.get_cmap('tab10', target_dim)
     x_sample = np.arange(1,forecast_horizon+history_length+1)
     for sample_idx in range(len(test_truth)):
@@ -40,7 +61,7 @@ def generate_plots(test_truth,forecast,history_length,forecast_horizon,target_di
         plt.grid(True)
         plt.savefig(f'{dataset}_sample_{sample_idx + 1}.png')  # Save the plot as an image
         plt.show() 
-
+    
 def generateDataPlots(target_dim, dataset_train, dataset_val, dataset_test,dataset_name):
     colors = cm.get_cmap('tab10', min(target_dim,12))
     x_sample = np.arange(0,len(dataset_test.list_data[-1]['target'][0]))
@@ -96,6 +117,63 @@ def plotHistogram(target_dim, dataset_train, dataset_val, dataset_test,dataset_n
         plt.show() 
 
 
+def generateQuantilePlots(test_truth,forecast,history_length,forecast_horizon,target_dim,dataset,min_y,max_y,y_buffer):
+    x_sample = np.arange(1,forecast_horizon+history_length+1)
+    for sample_idx in range(len(test_truth)):
+        plt.figure(sample_idx + 1,figsize=(10,4))  # Create a new figure for each sample
+        # Plotting forecast values
+        forecast_samples=forecast[sample_idx]  
+
+        # Calculate quantiles (e.g., 10th, 50th, and 90th percentiles)
+        quantiles = np.percentile(forecast_samples, [25, 50, 75], axis=0)
+
+        # Calculate the median and mean
+        median = np.median(forecast_samples, axis=0)
+        mean = np.mean(forecast_samples, axis=0)  
+        min_values = np.min(forecast_samples, axis=0)
+        max_values = np.max(forecast_samples, axis=0)
+
+        plt.plot(x_sample[history_length:], quantiles[0, :, 0], label='25th Percentile', color='red', linestyle='--')
+        plt.plot(x_sample[history_length:], quantiles[1, :, 0], label='50th Percentile (Median)', color='yellow')
+        plt.plot(x_sample[history_length:], quantiles[2, :, 0], label='75th Percentile', color='green', linestyle='--')
+        plt.fill_between(x_sample[history_length:], min_values[:, 0], max_values[:, 0], alpha=0.2, color='gray', label='Min-Max Range')
+        plt.plot(x_sample[history_length:], median[:, 0], label='Median', color='orange')
+        plt.plot(x_sample[history_length:], mean[:, 0], label='Mean', color='purple')
+
+        # Plotting truth values
+        truth_sample=test_truth[sample_idx][0]
+        for feature_idx in range(target_dim):
+            plt.plot(
+                x_sample[:],
+                truth_sample[:, feature_idx],
+                label=f'Truth Value',
+                color='blue'
+            )
+        plt.axvline(x=history_length, color='r', linestyle='--') 
+        plt.xlabel('Time')
+        plt.ylabel('Value')
+        plt.title(f'{dataset} Forecast(Quantiles) - Sample {sample_idx + 1}')
+        plt.ylim(min_y - y_buffer, max_y + y_buffer)
+        plt.grid(True)
+        plt.legend()
+        plt.savefig(f'{dataset}_Quantiles_Sample_{sample_idx + 1}.png')  # Save the plot as an image
+        plt.show() 
+
+def generateForecastHistograms(test_truth,forecast,dataset,min_y,max_y):
+    plt.figure()  
+    for sample_idx in range(len(test_truth)):
+        forecast_samples=forecast[sample_idx]  
+        mean = np.mean(forecast_samples, axis=0)  
+        plt.hist(mean[:], color='orange', alpha=0.7) 
+
+    plt.xlim([min_y, max_y])
+    plt.title(f'{dataset} Forecast Histogram')
+    plt.grid(True)
+    plt.legend()
+    plt.savefig(f'{dataset}_Forecast_Histogram.png')  # Save the plot as an image
+    plt.show() 
+
+
 # forecast_horizon=30
 # history_length=32
 # target_dim=1
@@ -108,4 +186,4 @@ def plotHistogram(target_dim, dataset_train, dataset_val, dataset_test,dataset_n
 # max_y = np.max(test_truth)
 # y_buffer = 0.2 * (max_y-min_y)  
 
-# generate_plots(forecast=forecast,test_truth=test_truth,history_length=history_length,forecast_horizon=forecast_horizon,target_dim=target_dim, dataset='ER Multivariate',max_y=max_y,min_y=min_y,y_buffer=y_buffer)
+# generateForecastHistograms(forecast=forecast,test_truth=test_truth,dataset='ER Multivariate',max_y=max_y,min_y=min_y)

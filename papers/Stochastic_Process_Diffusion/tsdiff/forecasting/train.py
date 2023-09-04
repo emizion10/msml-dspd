@@ -220,7 +220,7 @@ def train(
     # dataset = get_dataset(dataset, regenerate=False)
 
     uni_dataset = convert_tsf_to_dataframe(
-        './papers/Stochastic_Process_Diffusion/tsdiff/data/saugeenday_dataset.tsf')
+        './papers/Stochastic_Process_Diffusion/tsdiff/data/gold_price_dataset.tsf')
 
     univariate_data = uni_dataset[0]['series_value'].values[0]
     forecast_horizon =  uni_dataset[2] #24
@@ -232,7 +232,6 @@ def train(
     }
     dataset_train = ListDataset([data_entry_train], freq="D")
 
-    test_start_timestamp = start_timestamp + np.timedelta64(train_index, 'D')
     data_entry_test = []
     for i in range(1,6):
         data_entry_test.append({
@@ -266,7 +265,7 @@ def train(
     max_y = np.max(dataset_train[0]['target'])
     y_buffer = 0.2 * (max_y-min_y)  
 
-    generateDataPlots(target_dim,dataset_train,dataset_val,dataset_test,dataset_name='Saugeenday')
+    generateDataPlots(target_dim,dataset_train,dataset_val,dataset_test,dataset_name='Gold')
 
     mean = np.mean(dataset_train[0]['target'])
     std = np.std(dataset_train[0]['target'])
@@ -346,17 +345,9 @@ def train(
                    history_length=history_length,
                    forecast_horizon=forecast_horizon,
                    target_dim=target_dim,
-                   dataset='Saugeenday',
+                   dataset='Gold',
                    max_y=max_y,min_y=min_y,y_buffer=y_buffer)
 
-    generate_plots(forecast=(np.array([x.samples for x in forecasts]) * std) + mean,
-                   test_truth=(np.array([x[-(forecast_horizon+history_length):] for x in targets])[:,None,...] * std) + mean,
-                   history_length=history_length,
-                   forecast_horizon=forecast_horizon,
-                   target_dim=target_dim,
-                   dataset='Saugeenday_Sampled',
-                   sample_length=5,
-                   max_y=max_y,min_y=min_y,y_buffer=y_buffer)
 
     get_crps(forecast=(np.array([x.samples for x in forecasts]) * std) + mean,
              test_truth=(np.array([x[-forecast_horizon:] for x in targets])[:,None,...]*std)+mean)
