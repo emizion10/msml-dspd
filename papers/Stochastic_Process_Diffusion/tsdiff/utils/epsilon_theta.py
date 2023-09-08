@@ -31,30 +31,34 @@ class DiffusionEmbedding(nn.Module):
 
 
 class ResidualBlock(nn.Module):
+    ## hidden_size =64, residual_channel=8
     def __init__(self, hidden_size, residual_channels, dilation):
         super().__init__()
         self.dilated_conv = nn.Conv1d(
             residual_channels,
             2 * residual_channels,
-            3,
-            padding=dilation,
+            3, 
+            padding=1,
             dilation=dilation,
             padding_mode="circular",
         )
         self.diffusion_projection = nn.Linear(hidden_size, residual_channels)
         self.conditioner_projection = nn.Conv1d(
-            1, 2 * residual_channels, 1, padding=2, padding_mode="circular"
-        )
+            1, 2 * residual_channels, 1, padding=1, padding_mode="circular"
+        ) 
         self.output_projection = nn.Conv1d(residual_channels, 2 * residual_channels, 1)
 
         nn.init.kaiming_normal_(self.conditioner_projection.weight)
         nn.init.kaiming_normal_(self.output_projection.weight)
-
+    ## x([1920, 8, 3]), conditioner([1920, 1, 1]), diffusion_step ([1920, 64])
     def forward(self, x, conditioner, diffusion_step):
+        ## diffusion_step ([1920, 64]) => diffusion_step ([1920, 8,1])
         diffusion_step = self.diffusion_projection(diffusion_step).unsqueeze(-1)
+        ## conditioner([1920, 1, 1])=> conditioner([1920, 16, 3]) 
         conditioner = self.conditioner_projection(conditioner)
 
         y = x + diffusion_step
+        # y[1920,16,3]
         y = self.dilated_conv(y) + conditioner
 
         gate, filter = torch.chunk(y, 2, dim=1)
@@ -69,8 +73,9 @@ class ResidualBlock(nn.Module):
 class CondUpsampler(nn.Module):
     def __init__(self, cond_length, target_dim):
         super().__init__()
-        self.linear1 = nn.Linear(cond_length, target_dim // 2)
-        self.linear2 = nn.Linear(target_dim // 2, target_dim)
+        ## Replacing target_dim // 2 with 1 for univariate datasets
+        self.linear1 = nn.Linear(cond_length, target_dim // 2 or 1)
+        self.linear2 = nn.Linear(target_dim // 2 or 1, target_dim)
 
     def forward(self, x):
         x = self.linear1(x)
@@ -93,8 +98,8 @@ class EpsilonTheta(nn.Module):
     ):
         super().__init__()
         self.input_projection = nn.Conv1d(
-            1, residual_channels, 1, padding=2, padding_mode="circular"
-        )
+            1, residual_channels, 1, padding=1, padding_mode="circular"
+        ) 
         self.diffusion_embedding = DiffusionEmbedding(
             time_emb_dim, proj_dim=residual_hidden
         )
@@ -111,18 +116,20 @@ class EpsilonTheta(nn.Module):
                 for i in range(residual_layers)
             ]
         )
-        self.skip_projection = nn.Conv1d(residual_channels, residual_channels, 3)
-        self.output_projection = nn.Conv1d(residual_channels, 1, 3)
+        self.skip_projection = nn.Conv1d(residual_channels, residual_channels, 2) 
+        self.output_projection = nn.Conv1d(residual_channels, 1, 2) 
+        # self.output_projection = nn.Conv1d(residual_channels, 1, 3,padding=1) 
 
         nn.init.kaiming_normal_(self.input_projection.weight)
         nn.init.kaiming_normal_(self.skip_projection.weight)
         nn.init.zeros_(self.output_projection.weight)
-
+    ## inputs(bs*pl,1,f), time(bs*pl), cond(bs*pl,1,hidd_dim)
     def forward(self, inputs, time, cond):
         x = self.input_projection(inputs)
         x = F.leaky_relu(x, 0.4)
 
         diffusion_step = self.diffusion_embedding(time)
+        ## cond(bs*pl,1,hidd_dim) => cond(bs*pl,1,f)
         cond_up = self.cond_upsampler(cond)
         skip = []
         for layer in self.residual_layers:
@@ -130,6 +137,7 @@ class EpsilonTheta(nn.Module):
             skip.append(skip_connection)
 
         x = torch.sum(torch.stack(skip), dim=0) / math.sqrt(len(self.residual_layers))
+        ## x(1920,8,3)=>x(1920,8,1) [x(bs*pl,res_lay,lout from inp_proj)=>x(bs*pl,res_lay,lout from skip_pro)]
         x = self.skip_projection(x)
         x = F.leaky_relu(x, 0.4)
         x = self.output_projection(x)
