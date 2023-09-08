@@ -212,7 +212,7 @@ def train(
 ):
     np.random.seed(seed)
     torch.manual_seed(seed)
-    min_max_scaling = True
+    min_max_scaling = False
 
     # TODO: Find the reason for this logic
     covariance_dim = 4 if dataset != 'exchange_rate_nips' else -4

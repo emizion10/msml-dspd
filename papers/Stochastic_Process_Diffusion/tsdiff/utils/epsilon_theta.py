@@ -58,6 +58,7 @@ class ResidualBlock(nn.Module):
         conditioner = self.conditioner_projection(conditioner)
 
         y = x + diffusion_step
+        # y[1920,16,3]
         y = self.dilated_conv(y) + conditioner
 
         gate, filter = torch.chunk(y, 2, dim=1)

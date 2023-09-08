@@ -134,7 +134,6 @@ def generateQuantilePlots(test_truth,forecast,history_length,forecast_horizon,ta
         max_values = np.max(forecast_samples, axis=0)
 
         plt.plot(x_sample[history_length:], quantiles[0, :, 0], label='25th Percentile', color='red', linestyle='--')
-        plt.plot(x_sample[history_length:], quantiles[1, :, 0], label='50th Percentile (Median)', color='yellow')
         plt.plot(x_sample[history_length:], quantiles[2, :, 0], label='75th Percentile', color='green', linestyle='--')
         plt.fill_between(x_sample[history_length:], min_values[:, 0], max_values[:, 0], alpha=0.2, color='gray', label='Min-Max Range')
         plt.plot(x_sample[history_length:], median[:, 0], label='Median', color='orange')
