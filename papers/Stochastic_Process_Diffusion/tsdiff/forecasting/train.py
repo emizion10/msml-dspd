@@ -221,7 +221,7 @@ def train(
     # dataset = get_dataset(dataset, regenerate=False)
 
     uni_dataset = convert_tsf_to_dataframe(
-        './papers/Stochastic_Process_Diffusion/tsdiff/data/gold_price_dataset.tsf')
+        f'./papers/Stochastic_Process_Diffusion/tsdiff/data/{dataset}.tsf')
 
     univariate_data = uni_dataset[0]['series_value'].values[0]
     forecast_horizon =  uni_dataset[2] #24
@@ -266,7 +266,7 @@ def train(
     max_y = np.max(dataset_train[0]['target'])
     y_buffer = 0.2 * (max_y-min_y)  
 
-    generateDataPlots(target_dim,dataset_train,dataset_val,dataset_test,dataset_name='Gold')
+    generateDataPlots(target_dim,dataset_train,dataset_val,dataset_test,dataset_name=dataset)
 
     if(min_max_scaling):
         min_value = np.min(dataset_train[0]['target'])
@@ -355,7 +355,7 @@ def train(
                    history_length=history_length,
                    forecast_horizon=forecast_horizon,
                    target_dim=target_dim,
-                   dataset='Gold',
+                   dataset=dataset,
                    max_y=max_y,min_y=min_y,y_buffer=y_buffer)
 
 
@@ -373,7 +373,7 @@ def train(
                    history_length=history_length,
                    forecast_horizon=forecast_horizon,
                    target_dim=target_dim,
-                   dataset='Gold',
+                   dataset=dataset,
                    max_y=max_y,min_y=min_y,y_buffer=y_buffer)
         get_crps(forecast=(np.array([x.samples for x in forecasts]) * std) + mean,
                 test_truth=(np.array([x[-forecast_horizon:] for x in targets])[:,None,...] * std) + mean)

@@ -1,4 +1,5 @@
 import math
+import numpy as np
 
 import torch
 from torch import nn
@@ -125,12 +126,17 @@ class EpsilonTheta(nn.Module):
         nn.init.zeros_(self.output_projection.weight)
     ## inputs(bs*pl,1,f), time(bs*pl), cond(bs*pl,1,hidd_dim)
     def forward(self, inputs, time, cond):
+        UNetmodel = UNet1D(1, 1)
+        output = UNetmodel(inputs)
+        return output
+
         x = self.input_projection(inputs)
         x = F.leaky_relu(x, 0.4)
-
+        ## diffusion_step(bs*pl,1)=>diffusion_step(bs*pl,1,bs)
         diffusion_step = self.diffusion_embedding(time)
         ## cond(bs*pl,1,hidd_dim) => cond(bs*pl,1,f)
         cond_up = self.cond_upsampler(cond)
+
         skip = []
         for layer in self.residual_layers:
             x, skip_connection = layer(x, cond_up, diffusion_step)
@@ -141,4 +147,56 @@ class EpsilonTheta(nn.Module):
         x = self.skip_projection(x)
         x = F.leaky_relu(x, 0.4)
         x = self.output_projection(x)
+        return x
+
+
+class UNet1D(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(UNet1D, self).__init__()
+
+        self.e11 = nn.Conv1d(in_channels, 64, kernel_size=3, padding=1) 
+        self.e12 = nn.Conv1d(64, 64, kernel_size=3, padding=1) 
+        self.pool1 = nn.MaxPool1d(kernel_size=2, stride=2) 
+
+        self.e21 = nn.Conv1d(64, 128, kernel_size=3, padding=1)
+        self.e22 = nn.Conv1d(128, 128, kernel_size=3, padding=1)
+        self.pool2 = nn.MaxPool1d(kernel_size=2, stride=2)
+
+        self.e31 = nn.Conv1d(128, 256, kernel_size=3, padding=1) 
+        self.e32 = nn.Conv1d(256, 256, kernel_size=3, padding=1) 
+
+        self.upconv1 = nn.ConvTranspose1d(256, 128, kernel_size=3, stride=2)
+        self.d11 = nn.Conv1d(256, 128, kernel_size=3, padding=1)
+        self.d12 = nn.Conv1d(128, 128, kernel_size=3, padding=1)
+
+        self.upconv2 = nn.ConvTranspose1d(128, 64, kernel_size=2, stride=2)
+        self.d21 = nn.Conv1d(128, 64, kernel_size=3, padding=1)
+        self.d22 = nn.Conv1d(64, 64, kernel_size=3, padding=1)
+        self.relu= nn.ReLU()
+
+        self.outconv = nn.Conv1d(64, out_channels, kernel_size=1)
+
+    def forward(self, x):
+        xe11 = self.relu(self.e11(x))
+        xe12 = self.relu(self.e12(xe11))
+        xp1 = self.pool1(xe12)
+
+        xe21 = self.relu(self.e21(xp1))
+        xe22 = self.relu(self.e22(xe21))
+        xp2 = self.pool2(xe22)
+
+        xe31 = self.relu(self.e31(xp2))
+        xe32 = self.relu(self.e32(xe31))
+
+        xu1 = self.upconv1(xe32)
+        xu11 = torch.cat([xu1, xe22], dim=1)
+        xd11 = self.relu(self.d11(xu11))
+        xd12 = self.relu(self.d12(xd11))
+
+        xu2 = self.upconv2(xd12)
+        xu22 = torch.cat([xu2, xe12], dim=1)
+        xd21 = self.relu(self.d21(xu22))
+        xd22 = self.relu(self.d22(xd21))
+
+        x = self.outconv(xd22)
         return x

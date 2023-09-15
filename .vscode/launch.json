@@ -14,7 +14,7 @@
           "--seed",
           "1",
           "--dataset",
-          "exchange_rate_nips",
+          "us_births_dataset",
           "--network",
           "timegrad_transformer",
           "--noise",
