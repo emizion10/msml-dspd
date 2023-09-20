@@ -41,8 +41,9 @@ class DenoiseWrapper(nn.Module):
         #     x = x + self.time_embedding(t.squeeze(-1).long())
 
         # x = x.view(-1, 1, x.shape[-1])
-        i = i.view(-1).long()
-        latent = latent.reshape(-1, 1, latent.shape[-1])
+        # i = i.view(-1).long()
+        i = i.long()
+        # latent = latent.reshape(-1, 1, latent.shape[-1])
         x = x.reshape(-1,1,x.shape[1])
         y = self.denoise_fn(x, i, latent)
         y = y.view(*shape)

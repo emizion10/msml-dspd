@@ -7,6 +7,7 @@ import torch.nn.functional as F
 
 
 class DiffusionEmbedding(nn.Module):
+    ## dim=16, proj_dim=64
     def __init__(self, dim, proj_dim, max_steps=500):
         super().__init__()
         self.register_buffer(
@@ -127,15 +128,19 @@ class EpsilonTheta(nn.Module):
     ## inputs(bs*pl,1,f), time(bs*pl), cond(bs*pl,1,hidd_dim)
     def forward(self, inputs, time, cond):
         UNetmodel = UNet1D(1, 1)
-        output = UNetmodel(inputs)
-        return output
-
-        x = self.input_projection(inputs)
-        x = F.leaky_relu(x, 0.4)
-        ## diffusion_step(bs*pl,1)=>diffusion_step(bs*pl,1,bs)
-        diffusion_step = self.diffusion_embedding(time)
         ## cond(bs*pl,1,hidd_dim) => cond(bs*pl,1,f)
         cond_up = self.cond_upsampler(cond)
+        cond_up = cond_up.reshape(-1,1,cond_up.shape[1])
+
+        time = time.reshape(-1,1,time.shape[1])
+        diffusion_step = self.diffusion_embedding(time)
+        output = UNetmodel(inputs,cond_up, diffusion_step)
+        return output
+
+        # x = self.input_projection(inputs)
+        # x = F.leaky_relu(x, 0.4)
+        ## diffusion_step(bs*pl,1)=>diffusion_step(bs*pl,1,bs)
+      
 
         skip = []
         for layer in self.residual_layers:
@@ -153,6 +158,8 @@ class EpsilonTheta(nn.Module):
 class UNet1D(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(UNet1D, self).__init__()
+
+        self.diffusion_projection = nn.Linear(64, 1)
 
         self.e11 = nn.Conv1d(in_channels, 64, kernel_size=3, padding=1) 
         self.e12 = nn.Conv1d(64, 64, kernel_size=3, padding=1) 
@@ -176,7 +183,11 @@ class UNet1D(nn.Module):
 
         self.outconv = nn.Conv1d(64, out_channels, kernel_size=1)
 
-    def forward(self, x):
+    def forward(self, x,cond_up, diffusion_step):
+        diffusion_step = self.diffusion_projection(diffusion_step.squeeze(1))
+        diffusion_step = diffusion_step.reshape(-1,1,diffusion_step.shape[1])
+
+        x = x + diffusion_step +  cond_up
         xe11 = self.relu(self.e11(x))
         xe12 = self.relu(self.e12(xe11))
         xp1 = self.pool1(xe12)
