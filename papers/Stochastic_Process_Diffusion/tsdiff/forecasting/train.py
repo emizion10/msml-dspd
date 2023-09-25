@@ -333,7 +333,8 @@ def train(
         ),
     )
     # Training
-    predictor = estimator.train(dataset_train, dataset_val, num_workers=8)
+    # TODO: use if condition for min-max scaling also
+    predictor = estimator.train(dataset_train, dataset_val, num_workers=8, dataset_test=dataset_test, mean=mean, std=std)
 
     # Evaluation
     forecast_it, ts_it = make_evaluation_predictions(dataset=dataset_test, predictor=predictor, num_samples=100)

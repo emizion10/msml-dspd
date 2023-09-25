@@ -1,6 +1,7 @@
 from typing import Optional, Union
 
 from copy import deepcopy
+import numpy as np
 from tqdm.auto import tqdm
 
 import torch
@@ -8,9 +9,15 @@ import torch.nn as nn
 from torch.optim import Adam
 from torch.optim.lr_scheduler import OneCycleLR
 from torch.utils.data import DataLoader
+from gluonts.dataset.common import Dataset
+from gluonts.model.predictor import Predictor
+from gluonts.transform import Transformation
+from gluonts.evaluation.backtest import make_evaluation_predictions
 
 from gluonts.core.component import validated
 from pts import Trainer
+from tsdiff.forecasting.metrics import get_crps
+from tsdiff.forecasting.plot import plotCRPS
 
 
 class TrainerForecasting(Trainer):
@@ -43,7 +50,14 @@ class TrainerForecasting(Trainer):
         net: nn.Module,
         train_iter: DataLoader,
         validation_iter: Optional[DataLoader] = None,
+        dataset_test: Optional[Dataset] = None,
+        create_pred: Optional[Predictor] = None,
+        transformation: Optional[Transformation] = None,
+        mean: float = 0,
+        std: float = 0,
     ) -> None:
+
+        intermediate_net = net
 
         optimizer = Adam(net.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
 
@@ -58,7 +72,7 @@ class TrainerForecasting(Trainer):
         best_loss = float('inf')
         waiting = 0
         best_net = deepcopy(net.state_dict())
-
+        crps_scores=[]
         # Training loop
         for epoch_no in range(self.epochs):
             # mark epoch start time
@@ -140,8 +154,21 @@ class TrainerForecasting(Trainer):
                 else:
                     waiting += 1
 
-            # mark epoch end time and log time cost of current epoch
+            print(f'Epoch {epoch_no} finished')
+            if(dataset_test is not None):
+                print(f'Calculating CRPS of epoch {epoch_no}')
+                intermediate_net.load_state_dict(net.state_dict())
+                predictor = create_pred(transformation,intermediate_net,self.device)
+                forecast_it, ts_it = make_evaluation_predictions(dataset=dataset_test, predictor=predictor, num_samples=100)
+                forecasts = list(forecast_it)
+                targets = list(ts_it)
+                crps = get_crps(forecast=(np.array([x.samples for x in forecasts]) * std) + mean,
+                test_truth=(np.array([x[-30:] for x in targets])[:,None,...] * std) + mean, print_results=False )
+                crps_scores.append(crps)
 
+
+            # mark epoch end time and log time cost of current epoch
+        plotCRPS(crps_scores)
         net.load_state_dict(best_net)
 
 # python -m tsdiff.train_forecasting --seed 1 --dataset electricity_nips --network timegrad_rnn --noise ou --epochs 100

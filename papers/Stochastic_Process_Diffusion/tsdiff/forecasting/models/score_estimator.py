@@ -1,6 +1,19 @@
 from typing import Any, Callable, List, Optional
 
 import torch
+from torch.utils.data import DataLoader
+
+from typing import NamedTuple, Optional
+import torch
+import torch.nn as nn
+from gluonts.env import env
+from gluonts.dataset.common import Dataset
+from gluonts.dataset.common import ListDataset
+from gluonts.torch.model.predictor import PyTorchPredictor
+from gluonts.transform import SelectFields, Transformation
+from gluonts.itertools import maybe_len
+from pts.model import get_module_forward_input_names
+from pts.dataset.loader import TransformedIterableDataset
 
 from gluonts.dataset.field_names import FieldName
 from gluonts.time_feature import TimeFeature
@@ -34,6 +47,10 @@ from pts.model.utils import get_module_forward_input_names
 
 from tsdiff.utils import TrainerForecasting
 
+class TrainOutput(NamedTuple):
+    transformation: Transformation
+    trained_net: nn.Module
+    predictor: PyTorchPredictor
 
 class ScoreEstimator(PyTorchEstimator):
     def __init__(
@@ -270,3 +287,87 @@ class ScoreEstimator(PyTorchEstimator):
             prediction_length=self.prediction_length,
             device=device,
         )
+
+    def train_model(
+            self,
+            training_data: Dataset,
+            validation_data: Optional[Dataset] = None,
+            dataset_test: Optional[ListDataset] = None,
+            num_workers: int = 0,
+            prefetch_factor: int = 2,
+            shuffle_buffer_length: Optional[int] = None,
+            cache_data: bool = False,
+            mean: float = 0,
+            std: float =0,
+            **kwargs,
+        ) -> TrainOutput:
+            transformation = self.create_transformation()
+
+            trained_net = self.create_training_network(self.trainer.device)
+
+            input_names = get_module_forward_input_names(trained_net)
+
+            with env._let(max_idle_transforms=maybe_len(training_data) or 0):
+                training_instance_splitter = self.create_instance_splitter("training")
+            training_iter_dataset = TransformedIterableDataset(
+                ## Eg:- [8,5471] for exchange rate
+                dataset=training_data,
+                transform=transformation
+                + training_instance_splitter
+                + SelectFields(input_names),
+                is_train=True,
+                shuffle_buffer_length=shuffle_buffer_length,
+                cache_data=cache_data,
+            )
+
+            training_data_loader = DataLoader(
+                training_iter_dataset,
+                batch_size=self.trainer.batch_size,
+                num_workers=num_workers,
+                prefetch_factor=prefetch_factor,
+                pin_memory=True,
+                worker_init_fn=self._worker_init_fn,
+                **kwargs,
+            )
+
+            validation_data_loader = None
+            if validation_data is not None:
+                with env._let(max_idle_transforms=maybe_len(validation_data) or 0):
+                    validation_instance_splitter = self.create_instance_splitter("validation")
+                validation_iter_dataset = TransformedIterableDataset(
+                    dataset=validation_data,
+                    transform=transformation
+                    + validation_instance_splitter
+                    + SelectFields(input_names),
+                    is_train=True,
+                    cache_data=cache_data,
+                )
+                validation_data_loader = DataLoader(
+                    validation_iter_dataset,
+                    batch_size=self.trainer.batch_size,
+                    num_workers=num_workers,
+                    prefetch_factor=prefetch_factor,
+                    pin_memory=True,
+                    worker_init_fn=self._worker_init_fn,
+                    **kwargs,
+                )
+            ## Call to TrainerForecasting
+            self.trainer(
+                net=trained_net,
+                train_iter=training_data_loader,
+                validation_iter=validation_data_loader,
+                create_pred = self.create_predictor,
+                dataset_test=dataset_test,
+                transformation=transformation,
+                mean=mean,
+                std=std,
+            )
+
+            return TrainOutput(
+                transformation=transformation,
+                trained_net=trained_net,
+                predictor=self.create_predictor(
+                    transformation, trained_net, self.trainer.device
+                ),
+            )
+

@@ -172,6 +172,13 @@ def generateForecastHistograms(test_truth,forecast,dataset,min_y,max_y):
     plt.savefig(f'{dataset}_Forecast_Histogram.png')  # Save the plot as an image
     plt.show() 
 
+def plotCRPS(crps):
+    plt.figure()  
+    plt.plot(crps) 
+    plt.title(f'CRPS across Training')
+    plt.savefig(f'crps_training.png')  # Save the plot as an image
+    plt.show() 
+
 
 # forecast_horizon=30
 # history_length=32

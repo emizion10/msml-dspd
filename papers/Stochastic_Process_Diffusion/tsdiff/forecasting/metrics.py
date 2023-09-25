@@ -12,7 +12,7 @@ def calc_crps_sample(actual, forecast):
 # test_truth = np.random.rand(7,1,32,target_dim)
 # forecast = np.random.rand(7,100,32,target_dim)
 
-def get_crps(forecast,test_truth):
+def get_crps(forecast,test_truth,print_results=True):
     num_samples = len(test_truth)
     target_dim = test_truth.shape[-1] 
     forecast_horizon = test_truth.shape[-2]   
@@ -21,8 +21,9 @@ def get_crps(forecast,test_truth):
     crps_array= calc_crps_sample(test_truth_reshaped,forecast_reshaped)
     crps = np.mean(crps_array)
     crps_mean_sample = np.mean(crps_array,axis=1)
-    print('Custom CRPS Score', crps)
-    print('CRPS along samples',crps_mean_sample)
+    if(print_results):
+        print('Custom CRPS Score', crps)
+        print('CRPS along samples',crps_mean_sample)
     return crps
 
 
