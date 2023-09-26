@@ -165,9 +165,16 @@ class UNet1D(nn.Module):
         self.e12 = nn.Conv1d(64, 64, kernel_size=3, padding=1) 
         self.pool1 = nn.MaxPool1d(kernel_size=2, stride=2) 
 
+        self.e1_diff_proj = nn.Linear(30, 15)
+        self.e1_cond_proj = nn.Linear(30, 15)
+
+
         self.e21 = nn.Conv1d(64, 128, kernel_size=3, padding=1)
         self.e22 = nn.Conv1d(128, 128, kernel_size=3, padding=1)
         self.pool2 = nn.MaxPool1d(kernel_size=2, stride=2)
+
+        self.e2_diff_proj = nn.Linear(30, 7)
+        self.e2_cond_proj = nn.Linear(30, 7)
 
         self.e31 = nn.Conv1d(128, 256, kernel_size=3, padding=1) 
         self.e32 = nn.Conv1d(256, 256, kernel_size=3, padding=1) 
@@ -187,27 +194,55 @@ class UNet1D(nn.Module):
         diffusion_step = self.diffusion_projection(diffusion_step.squeeze(1))
         diffusion_step = diffusion_step.reshape(-1,1,diffusion_step.shape[1])
 
+        ## [64,1,30]
         x = x + diffusion_step +  cond_up
+        ## [64,64,30]
         xe11 = self.relu(self.e11(x))
         xe12 = self.relu(self.e12(xe11))
+        ## [64,64,15]
         xp1 = self.pool1(xe12)
 
+        ## Transforming time embedding & conditioner to required dimension after encoder 1
+        diff_step_e1 = self.e1_diff_proj(diffusion_step)
+        diff_step_e1 = diff_step_e1.repeat(1,64,1)
+        cond_up_e1 = self.e1_cond_proj(cond_up)
+        cond_up_e1 = cond_up_e1.repeat(1,64,1)
+        xp1 = xp1 + diff_step_e1 + cond_up_e1
+
+        ## [64,128,15]
         xe21 = self.relu(self.e21(xp1))
         xe22 = self.relu(self.e22(xe21))
+        ## [64,128,7]
         xp2 = self.pool2(xe22)
 
+        ## Transforming time embedding & conditioner to required dimension after encoder 2
+        diff_step_e2 = self.e2_diff_proj(diffusion_step)
+        diff_step_e2 = diff_step_e2.repeat(1,128,1)
+        cond_up_e2 = self.e2_cond_proj(cond_up)
+        cond_up_e2 = cond_up_e2.repeat(1,128,1)
+        xp2 = xp2 + diff_step_e2 + cond_up_e2
+
+        ## [64,256,7]
         xe31 = self.relu(self.e31(xp2))
+        ## [64,256,7]
         xe32 = self.relu(self.e32(xe31))
 
+        ## [64,128,15]
         xu1 = self.upconv1(xe32)
+        ## [64,256,15]
         xu11 = torch.cat([xu1, xe22], dim=1)
         xd11 = self.relu(self.d11(xu11))
+        ## [64,128,15]
         xd12 = self.relu(self.d12(xd11))
 
+        ## [64,64,30]
         xu2 = self.upconv2(xd12)
+        ## [64,128,30]
         xu22 = torch.cat([xu2, xe12], dim=1)
         xd21 = self.relu(self.d21(xu22))
+        ## [64,64,30]
         xd22 = self.relu(self.d22(xd21))
 
         x = self.outconv(xd22)
+        ## [64,1,30]
         return x
