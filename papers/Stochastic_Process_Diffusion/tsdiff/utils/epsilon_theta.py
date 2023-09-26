@@ -160,14 +160,19 @@ class UNet1D(nn.Module):
         super(UNet1D, self).__init__()
 
         self.diffusion_projection = nn.Linear(64, 1)
+        self.input_projection = nn.Linear(90, 30)
 
         self.e11 = nn.Conv1d(in_channels, 64, kernel_size=3, padding=1) 
         self.e12 = nn.Conv1d(64, 64, kernel_size=3, padding=1) 
         self.pool1 = nn.MaxPool1d(kernel_size=2, stride=2) 
 
+        self.input_proj_e1 = nn.Linear(75, 15)
+
         self.e21 = nn.Conv1d(64, 128, kernel_size=3, padding=1)
         self.e22 = nn.Conv1d(128, 128, kernel_size=3, padding=1)
         self.pool2 = nn.MaxPool1d(kernel_size=2, stride=2)
+
+        self.input_proj_e2 = nn.Linear(67, 7)
 
         self.e31 = nn.Conv1d(128, 256, kernel_size=3, padding=1) 
         self.e32 = nn.Conv1d(256, 256, kernel_size=3, padding=1) 
@@ -187,27 +192,58 @@ class UNet1D(nn.Module):
         diffusion_step = self.diffusion_projection(diffusion_step.squeeze(1))
         diffusion_step = diffusion_step.reshape(-1,1,diffusion_step.shape[1])
 
-        x = x + diffusion_step +  cond_up
+        ## [64,1,90]
+        x = torch.cat((x, diffusion_step, cond_up), dim=2)
+        ##[64,1,30]
+        x = self.input_projection(x)
+
+        ## [64,64,30]
         xe11 = self.relu(self.e11(x))
         xe12 = self.relu(self.e12(xe11))
+        ## [64,64,15]
         xp1 = self.pool1(xe12)
 
+        ## Transforming time embedding & conditioner to required dimension after encoder 1
+        diff_e1 = diffusion_step.repeat(1,64,1)
+        cond_up_e1 = cond_up.repeat(1,64,1)
+        xp1 = torch.cat((xp1, diff_e1, cond_up_e1), dim=2)
+        xp1 = self.input_proj_e1(xp1)
+
+
+
+        ## [64,128,15]
         xe21 = self.relu(self.e21(xp1))
         xe22 = self.relu(self.e22(xe21))
+        ## [64,128,7]
         xp2 = self.pool2(xe22)
 
+        ## Transforming time embedding & conditioner to required dimension after encoder 2
+        diff_e2 = diffusion_step.repeat(1,128,1)
+        cond_up_e2 = cond_up.repeat(1,128,1)
+        xp2 = torch.cat((xp2, diff_e2, cond_up_e2), dim=2)
+        xp2 = self.input_proj_e2(xp2)
+
+        ## [64,256,7]
         xe31 = self.relu(self.e31(xp2))
+        ## [64,256,7]
         xe32 = self.relu(self.e32(xe31))
 
+        ## [64,128,15]
         xu1 = self.upconv1(xe32)
+        ## [64,256,15]
         xu11 = torch.cat([xu1, xe22], dim=1)
         xd11 = self.relu(self.d11(xu11))
+        ## [64,128,15]
         xd12 = self.relu(self.d12(xd11))
 
+        ## [64,64,30]
         xu2 = self.upconv2(xd12)
+        ## [64,128,30]
         xu22 = torch.cat([xu2, xe12], dim=1)
         xd21 = self.relu(self.d21(xu22))
+        ## [64,64,30]
         xd22 = self.relu(self.d22(xd21))
 
         x = self.outconv(xd22)
+        ## [64,1,30]
         return x
